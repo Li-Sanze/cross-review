@@ -25,7 +25,19 @@ def load_pack(case_dir: Path) -> dict:
     if not pack_path.exists():
         print(f"Error: {pack_path} not found")
         sys.exit(1)
-    return json.loads(pack_path.read_text(encoding="utf-8"))
+    pack = json.loads(pack_path.read_text(encoding="utf-8"))
+
+    if pack.get("artifact_type") != "code_diff":
+        print(f"Error: artifact_type must be 'code_diff', got '{pack.get('artifact_type')}'")
+        sys.exit(1)
+    if not pack.get("diff", "").strip():
+        print("Error: pack.json 'diff' is empty")
+        sys.exit(1)
+    if not pack.get("changed_files"):
+        print("Error: pack.json 'changed_files' is empty")
+        sys.exit(1)
+
+    return pack
 
 
 def _normalize_list(val) -> list[str]:

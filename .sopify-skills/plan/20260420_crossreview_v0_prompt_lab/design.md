@@ -12,7 +12,7 @@ prompt-lab/
 │   ├── 001-xxx/
 │   │   ├── diff.patch     # 原始 diff
 │   │   ├── pack.json      # 手工组装的 ReviewPack
-│   │   ├── expected.yaml  # 手工 cross-review baseline
+│   │   ├── manual-findings.yaml  # 手工 cross-review baseline
 │   │   ├── raw-output.md  # 模型原始输出
 │   │   └── adjudication.yaml  # 人工判定
 │   └── 002-xxx/

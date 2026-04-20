@@ -30,6 +30,22 @@ python run.py --render-only cases/001-auth-refresh
 # 5. 人工 adjudication → 编辑 cases/001-auth-refresh/adjudication.yaml
 ```
 
+## manual-findings.yaml 格式
+
+手工 baseline 格式与 [fixtures/README.md](../fixtures/README.md) 一致：
+
+```yaml
+fixture_id: "001-auth-refresh"
+source: manual_fresh_session
+reviewer_model: "claude-sonnet-4-20250514"
+reviewed_at: "2026-04-20T16:00:00+08:00"
+findings:
+  - id: "mf-001"
+    summary: "Token expiry off-by-one"
+    file: "src/auth/token.ts"
+    severity_estimate: high
+```
+
 ## ReviewPack 手写格式
 
 ```json
