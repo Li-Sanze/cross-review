@@ -8,7 +8,7 @@ English | [简体中文](README.zh-CN.md)
 
 When a human team reviews code, the author doesn't review their own pull request — a **different person** looks at it with fresh eyes. CrossReview brings the same discipline to AI-generated code.
 
-Your AI coding assistant (Claude, Copilot, Cursor, etc.) writes code in one session. CrossReview sends the resulting diff to a **separate LLM session** that has never seen the original conversation. This "cross-reviewer" evaluates the change with no shared context — no confirmation bias, no inherited blind spots.
+Your AI coding assistant (Claude, Copilot, Cursor, etc.) writes code in one session. CrossReview packages the output into a ReviewPack and sends it to a **separate LLM session** that has never seen the original conversation. This "cross-reviewer" evaluates the change with no shared context — no confirmation bias, no inherited blind spots.
 
 The key insight: **you don't need a different model, just a different context.** Same model, clean session, real findings.
 
@@ -18,7 +18,7 @@ The author session carries every assumption, workaround, and shortcut it made �
 
 | Cross-reviewer sees | Cross-reviewer doesn't see |
 |---------------------|---------------------------|
-| The diff | Original conversation |
+| The change | Original conversation |
 | Stated intent | Planning & reasoning chain |
 | Focus areas | Tool call history |
 | Context files | Errors & retries |
