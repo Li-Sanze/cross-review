@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from crossreview.cli import main
-from crossreview.schema import FileMeta
+from crossreview.pack import assemble_pack, pack_to_json
+from crossreview.schema import (
+    BudgetStatus,
+    FileMeta,
+    ReviewerFailureReason,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -132,12 +138,147 @@ class TestPackCLI:
 # ---------------------------------------------------------------------------
 
 class TestVerifyCLI:
-    """crossreview verify CLI stub."""
+    """crossreview verify CLI."""
 
-    def test_verify_not_implemented(self, capsys):
-        rc = main(["verify"])
+    def _write_pack(self, tmp_path: Path, **kwargs) -> Path:
+        pack = assemble_pack(
+            SAMPLE_DIFF,
+            changed_files=SAMPLE_FILES,
+            **kwargs,
+        )
+        path = tmp_path / "pack.json"
+        path.write_text(pack_to_json(pack), encoding="utf-8")
+        return path
+
+    def test_verify_success(self, capsys, tmp_path):
+        pack_path = self._write_pack(tmp_path, intent="fix greeting")
+        with (
+            patch("crossreview.cli.resolve_reviewer_config") as resolve_cfg,
+            patch("crossreview.cli.resolve_reviewer_backend") as resolve_backend,
+        ):
+            resolve_cfg.return_value = type(
+                "Cfg",
+                (),
+                {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4-20250514",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                },
+            )()
+            backend = resolve_backend.return_value
+            backend.review.return_value = type(
+                "Resp",
+                (),
+                {
+                    "raw_analysis": """## Section 1: Findings
+
+**f-001**
+- **Where**: `hello.py`, line 2
+- **What**: The new print changes behavior.
+- **Why**: The diff now prints an extra line.
+- **Severity estimate**: LOW
+- **Category**: spec_mismatch
+""",
+                    "model": "claude-sonnet-4-20250514",
+                    "latency_sec": 1.2,
+                    "input_tokens": 100,
+                    "output_tokens": 80,
+                },
+            )()
+            rc = main(["verify", "--pack", str(pack_path)])
+
+        assert rc == 0
+        out = capsys.readouterr()
+        parsed = json.loads(out.out)
+        assert parsed["review_status"] == "complete"
+        assert parsed["reviewer"]["model"] == "claude-sonnet-4-20250514"
+        assert parsed["findings"][0]["id"] == "f-001"
+        assert "crossreview verify: review_status=complete" in out.err
+
+    def test_verify_invalid_json(self, capsys, tmp_path):
+        pack_path = tmp_path / "pack.json"
+        pack_path.write_text("{not json", encoding="utf-8")
+        rc = main(["verify", "--pack", str(pack_path)])
         assert rc == 1
-        assert "not yet implemented" in capsys.readouterr().err
+        assert "not valid JSON" in capsys.readouterr().err
+
+    def test_verify_invalid_pack_fails(self, capsys, tmp_path):
+        pack_path = tmp_path / "pack.json"
+        pack_path.write_text(json.dumps({"schema_version": "0.1-alpha"}), encoding="utf-8")
+        rc = main(["verify", "--pack", str(pack_path)])
+        assert rc == 1
+        assert "invalid ReviewPack" in capsys.readouterr().err
+
+    def test_verify_budget_rejected_returns_result(self, capsys, tmp_path):
+        pack_path = self._write_pack(tmp_path)
+        with (
+            patch("crossreview.cli.resolve_reviewer_config") as resolve_cfg,
+            patch("crossreview.cli.apply_budget_gate") as gate,
+        ):
+            resolve_cfg.return_value = type(
+                "Cfg",
+                (),
+                {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4-20250514",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                },
+            )()
+            gate.return_value = type(
+                "Gate",
+                (),
+                {
+                    "status": BudgetStatus.REJECTED,
+                    "effective_pack": None,
+                    "files_reviewed": 0,
+                    "files_total": 1,
+                    "chars_consumed": 0,
+                    "chars_limit": 100,
+                    "failure_reason": ReviewerFailureReason.CONTEXT_TOO_LARGE,
+                },
+            )()
+            rc = main(["verify", "--pack", str(pack_path)])
+
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["review_status"] == "rejected"
+        assert parsed["budget"]["status"] == "rejected"
+
+    def test_verify_reviewer_failure_returns_failed_result(self, capsys, tmp_path):
+        pack_path = self._write_pack(tmp_path)
+        with (
+            patch("crossreview.cli.resolve_reviewer_config") as resolve_cfg,
+            patch("crossreview.cli.resolve_reviewer_backend") as resolve_backend,
+        ):
+            resolve_cfg.return_value = type(
+                "Cfg",
+                (),
+                {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4-20250514",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                },
+            )()
+            backend = resolve_backend.return_value
+            from crossreview.reviewer import ReviewerDependencyError
+
+            backend.review.side_effect = ReviewerDependencyError("missing anthropic")
+            rc = main(["verify", "--pack", str(pack_path)])
+
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["review_status"] == "failed"
+        assert parsed["reviewer"]["failure_reason"] == "model_error"
+
+    def test_verify_config_error(self, capsys, tmp_path):
+        pack_path = self._write_pack(tmp_path)
+        from crossreview.config import ModelNotConfigured
+
+        with patch("crossreview.cli.resolve_reviewer_config", side_effect=ModelNotConfigured("missing")):
+            rc = main(["verify", "--pack", str(pack_path)])
+
+        assert rc == 1
+        assert "missing" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

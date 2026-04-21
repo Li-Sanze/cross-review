@@ -16,10 +16,11 @@ Design decisions:
 from __future__ import annotations
 
 import hashlib
+import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dc_fields
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 
 # ---------------------------------------------------------------------------
@@ -425,3 +426,83 @@ def validate_review_result(result: ReviewResult) -> list[str]:
 def compute_fingerprint(content: str) -> str:
     """SHA-256 hex digest of content — used for artifact_fingerprint and pack_fingerprint."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def to_serializable(obj: Any) -> Any:
+    """Recursively convert dataclasses / enums to JSON-native types."""
+    if isinstance(obj, Enum):
+        return obj.value
+    if hasattr(obj, "__dataclass_fields__"):
+        return {
+            f.name: to_serializable(getattr(obj, f.name))
+            for f in dc_fields(obj)
+        }
+    if isinstance(obj, list):
+        return [to_serializable(item) for item in obj]
+    return obj
+
+
+def review_result_to_json(result: ReviewResult, *, indent: int = 2) -> str:
+    """Serialize a ReviewResult to JSON."""
+    return json.dumps(to_serializable(result), indent=indent, ensure_ascii=False)
+
+
+def review_pack_from_dict(data: dict[str, Any]) -> ReviewPack:
+    """Construct a ReviewPack from parsed JSON data."""
+    artifact_type = ArtifactType(data.get("artifact_type", ArtifactType.CODE_DIFF.value))
+
+    changed_files = [
+        FileMeta(
+            path=item["path"],
+            language=item.get("language"),
+        )
+        for item in data.get("changed_files", [])
+    ]
+
+    context_files_data = data.get("context_files")
+    context_files = None
+    if context_files_data is not None:
+        context_files = [
+            ContextFile(
+                path=item["path"],
+                content=item["content"],
+                role=item.get("role"),
+            )
+            for item in context_files_data
+        ]
+
+    evidence_data = data.get("evidence")
+    evidence = None
+    if evidence_data is not None:
+        evidence = [
+            Evidence(
+                source=item["source"],
+                status=EvidenceStatus(item["status"]),
+                summary=item["summary"],
+                command=item.get("command"),
+                detail=item.get("detail"),
+            )
+            for item in evidence_data
+        ]
+
+    budget_data = data.get("budget") or {}
+    budget = PackBudget(
+        max_files=budget_data.get("max_files"),
+        max_chars_total=budget_data.get("max_chars_total"),
+        timeout_sec=budget_data.get("timeout_sec"),
+    )
+
+    return ReviewPack(
+        schema_version=data.get("schema_version", SCHEMA_VERSION),
+        artifact_type=artifact_type,
+        diff=data.get("diff", ""),
+        changed_files=changed_files,
+        artifact_fingerprint=data.get("artifact_fingerprint", ""),
+        pack_fingerprint=data.get("pack_fingerprint", ""),
+        intent=data.get("intent"),
+        task_file=data.get("task_file"),
+        focus=data.get("focus"),
+        context_files=context_files,
+        evidence=evidence,
+        budget=budget,
+    )
