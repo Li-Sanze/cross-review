@@ -25,6 +25,16 @@
 - CrossReview 不发明"交叉审查"——它把一个**已验证有效的手工模式**协议化和自动化。
 - **Context isolation 不是银弹。** fresh session 消除了生产 session 的上下文污染，但 ReviewPack 本身可能携带 producer bias——intent、focus、task 描述都来自 producer，如果描述有误导，reviewer 仍会被锚定。因此 reviewer prompt 必须明确：intent/focus/task 是待验证背景声明，不是真相；raw diff 是优先证据。否则只是把 bias 从 session 迁移到了 pack。
 
+### Artifact 边界
+
+CrossReview 的长期对象不是只有 code diff，而是**任意可审查 artifact**：例如 code diff、analysis、plan、design、review-result、final audit note 等。只要一个 artifact 可以被独立 session 消费并产出验证结论，它就属于 CrossReview 的概念边界。
+
+但为保证 v0 可验证、可收敛，当前范围**明确收窄到 `code_diff`**：
+
+- v0 的 ReviewPack schema、Prompt Lab、release gate、CLI examples 只按 `code_diff` 设计和验收
+- analysis / plan / design / review-result 的交叉验证，属于真实 workflow 使用场景，或未来 artifact type 扩展
+- 这类非 diff artifact 的结果可以单独记录为 workflow 模式收益，但**不计入**当前 Prompt Lab / v0 release gate 的 single-pass 指标
+
 ### 产品主张
 
 ```
@@ -104,6 +114,23 @@ v0 的评估不是学术实验，而是**与手工流程的 parity 测试**：
 
 以手工 fresh-session cross-review 作为 gold-ish baseline。**不做 generic prompt baseline 对照**（你已经知道 cross-review 有效，不需要再证明它比"不 review"好）。
 
+### 单次评审与交叉验证的边界
+
+v0 评估中需要区分两个对象：
+
+1. **单次评审（single-pass review）**
+   给 reviewer 一个 ReviewPack，让它在独立 fresh session 中输出第一轮 raw findings。Prompt Lab 与 release gate 中的 precision / manual_recall / invalid_findings_per_run，默认都按这个口径计算。
+
+2. **交叉验证（cross-validated review workflow）**
+   reviewer 先输出 findings，再由另一个独立 session / agent 对 findings 做实现核查、剔除幻觉、补充遗漏，并可把验证结果回喂给原 reviewer 再复核。这评估的是 workflow 级质量，不等同于 reviewer prompt 的 first-pass 质量。
+
+规则：
+
+- Prompt Lab 默认只统计 **单次评审** 的原始输出。
+- 第二模型批判、人工验证、回喂复核，不计入 Prompt Lab 的 reviewer 原始能力指标。
+- 如果需要验证 cross-review workflow 的整体收益，应单独记录为 workflow 模式结果，不与 single-pass 指标混算。
+- 如果 review target 不是 `code_diff`（例如 analysis / plan / review-result），同样按 workflow 模式单独记录；它属于 CrossReview 的使用场景，但不属于 v0 Prompt Lab / release gate 的评测对象。
+
 ### 指标定义
 
 | 指标 | 定义 | v0 目标 |
@@ -131,7 +158,7 @@ v0 的评估不是学术实验，而是**与手工流程的 parity 测试**：
 
 - 至少 20 个 diff fixture，目标 50 个
 - 每个 fixture 包含：diff + intent（可选） + 人工 expected issue notes
-- 来源：真实开发产出的 diff + 合成边界 case
+- 来源：真实开发产出的 diff；Prompt Lab 第一批固定使用真实 commit，不使用纯合成 case
 - 每个 fixture 运行后进行人工 adjudication
 
 **分阶段达标路径**（不降低 release gate，分里程碑验证）：
@@ -708,7 +735,7 @@ crossreview pack (或 verify 内部调用)
     ↓
 ┌─────────────────────┐
 │  Finding Normalizer  │  ← 从 raw analysis 提取结构化 finding
-│  → list[Finding]     │     regex/heuristic 提取 + LLM fallback
+│  → list[Finding]     │     deterministic parser（regex/heuristic）
 └─────────────────────┘
     ↓
 ┌─────────────────────┐
@@ -728,12 +755,13 @@ crossreview pack (或 verify 内部调用)
 
 1. **Evidence collector ≠ Reviewer** — lint/test 结果是证据，不是审查意见。它们丰富 ReviewPack，不产出 Finding。
 2. **Reviewer 只有一种（v0）** — `fresh_llm_reviewer`，在隔离 session 中执行。输出为自由分析文本（鼓励半结构化 markdown），不强制输出 Finding JSON schema。
-3. **两段式审查** — reviewer 先做自由分析（raw analysis），Finding Normalizer 再从中提取结构化 Finding。对外仍输出结构化 JSON，但不强迫模型一开始只吐严格 schema。原始分析文本保留为审计证据。
+3. **两段式审查** — reviewer 先做自由分析（raw analysis），Finding Normalizer 再以 deterministic parser 从中提取结构化 Finding。对外仍输出结构化 JSON，但不强迫模型一开始只吐严格 schema。原始分析文本保留为审计证据。
 4. **Adjudicator 是确定性的** — 基于 evidence status + finding severity + budget status 的规则引擎，不涉及 LLM。
 5. **Advisory only** — v0 的 verdict 只是建议，不做 block。
 6. **code_diff only (v0)** — v0 只接受 code_diff artifact。Plan/design/custom 是 schema 预留，v0 不实现不验收。
 7. **Core 不选择模型** — core 接收 resolved `ReviewerConfig`，不内置默认供应商或模型。
 8. **Pack bias 意识** — reviewer prompt 必须将 intent/focus/task 视为"待验证的背景声明"，raw diff 为优先证据。
+9. **Normalizer 保持确定性（v0）** — v0 只实现 regex/heuristic parser，不引入 LLM fallback；若 raw output 无法稳定解析，应视为 reviewer/prompt 质量信号，而不是用第二次 LLM 调用兜底。
 
 ### Model Resolution
 
@@ -1020,6 +1048,34 @@ blocking_release_gates:
   failure_rate: ≤ 0.10           # failed_runs / total_runs；failure = review_status ∈ {rejected, failed} / output malformed / model error/timeout（truncated ≠ failure）
   fixture_count: ≥ 20            # 目标 50
 ```
+
+#### Fixture Pool 组成约束
+
+```yaml
+pool_definitions:
+  self_hosting_pool:
+    definition: cross-review 仓库自身的提交（reviewer 审查自己的代码变更）
+    用途: pack fidelity 回归、normalizer 鲁棒性、boundary regression
+    归属: dogfooding / self-hosting signal，单列，不作为主报指标
+    上限: release gate fixture_count 中 ≤ 25%
+  external_eval_pool:
+    definition: 非 cross-review 的目标代码库提交（hermes / helloagents / graphify 等）
+    用途: precision / manual_recall / invalid_per_run / 泛化能力
+    归属: release gate 主报
+
+reporting_rule:
+  primary: external-only        # 决定是否有泛化能力的主指标
+  supplementary: overall        # 含 self-hosting，用于回归与全局稳定性观察
+```
+
+> **注意**：self_hosting_pool 的 25% 上限只约束 release gate fixture_count，
+> 不约束内部回归集。内部 regression suite 可以有更多 self-hosting case，
+> 用于 1B.1-fidelity、normalizer golden test、pipeline 自动化验证等。
+>
+> **Gate 判定范围**：
+> - `fixture_count >= 20` 按 **overall**（含 self-hosting）计数
+> - `precision / manual_recall / invalid_findings_per_run` 的主报 pass/fail 以 **external-only** 为准
+> - overall 值作为补充观察指标，不阻 release
 
 ### Diagnostic Metrics（观察不阻 release，评估时关注）
 

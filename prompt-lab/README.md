@@ -6,6 +6,20 @@
 
 CrossReview 的全部价值取决于"给模型一个 ReviewPack，它能输出多少真 finding"。如果 raw output 质量不行，schema / adjudicator / formatter 都是在包装失败。
 
+## 单次评审 vs 交叉验证
+
+Prompt Lab 默认评估的是 **单次评审（single-pass review）**，不是完整的 cross-review workflow。
+
+- **单次评审**：给 reviewer 一个 ReviewPack，让它在独立 fresh session 中输出第一轮 raw findings。Prompt Lab 的 precision / recall / invalid rate 默认只看这一轮原始输出，不把后续人工修正、第二模型批判、或回喂复核混进指标。
+- **交叉验证**：reviewer 先输出 findings，再由另一个独立 session / agent 对这些 findings 做实现核查、打掉幻觉、补充遗漏，必要时再把验证结果回喂给原 reviewer 复核。这是 CrossReview 的真实使用场景之一，但它评估的是 **workflow 质量**，不是 reviewer prompt 的 first-pass 质量。
+
+两者都合理，但不能混算：
+
+- 要验证 `prompt-template.md` 是否有效，使用 **单次评审** 口径。
+- 要验证“reviewer + validator + adjudicator”整条链路能否提升 precision，使用 **交叉验证** 口径。
+
+如果同一批 case 既跑单次评审，又跑交叉验证，结果应分别记录，避免把 workflow 增益误记为 prompt 本身的能力。
+
 ## 怎么跑
 
 ```bash
@@ -17,10 +31,7 @@ mkdir cases/001-auth-refresh
 #    - pack.json: 手工/半手写 ReviewPack（格式见下方）
 #    - manual-findings.yaml: 手工 cross-review 发现的问题（gold baseline）
 
-# 3a. 有 LLM client 实现时：直接运行
-python run.py cases/001-auth-refresh
-
-# 3b. 无 LLM client 时：渲染 prompt → 手动粘贴给模型
+# 3. 渲染 prompt → 手动粘贴给模型
 python run.py --render-only cases/001-auth-refresh
 # → 生成 cases/001-auth-refresh/rendered-prompt.md
 # → 粘贴到 Claude/ChatGPT session，保存 output 到 raw-output.md
@@ -28,6 +39,7 @@ python run.py --render-only cases/001-auth-refresh
 # 4. 查看 raw output → cases/001-auth-refresh/raw-output.md
 
 # 5. 人工 adjudication → 编辑 cases/001-auth-refresh/adjudication.yaml
+# 6. 更新 prompt-lab/summary.md 汇总表
 ```
 
 ## manual-findings.yaml 格式
@@ -59,6 +71,34 @@ findings:
   "evidence": []
 }
 ```
+
+## Baseline 独立性要求（扩样规则）
+
+`manual-findings.yaml` 是 recall 计算的分母定义，不是普通标注文件。如果 baseline 不独立，recall 数字会变成自证循环。
+
+**强制要求：**
+
+1. **先 baseline，再 reviewer** — `manual-findings.yaml` 必须先于 reviewer 输出落盘。不允许先跑 reviewer、看到 findings 再回填 baseline。
+2. **baseline 与 reviewer 隔离** — 写 baseline 的人/session 不得接触当次 reviewer 输出。最低标准：人工独立 fresh-session cross-review，或由未参与本次 reviewer run 的人来写。
+3. **事后补 baseline 必须显式标注** — 如果某个 case 的 baseline 确实是事后补的（特殊情况），必须在 summary.md 对应行显式标注（如 `baseline: post-reviewer`），不得和原生独立 baseline 混算 recall。
+4. **每批新增 ≥1 clean diff** — 不允许所有 case 都是 bug-heavy case；否则 precision=1.00 只反映样本偏差。
+
+**到 10 个 fixture 时的过程检查：**
+
+除 precision / recall / unclear_rate / 边界项占比外，额外统计：
+- 有多少 baseline 是"先 reviewer 后补"？
+- 该比例如果超过 20%，需在 summary 中单独注明 recall 解释力下降。
+
+## Fixture 选择约束
+
+Prompt Lab 第一批 case 固定使用 3-5 个真实 diff，不使用纯合成 case。
+
+- 来源限定为近期真实 commit，优先从 `cross-review/`、`helloagents/`、`hermes-agent/` 提取
+- 至少包含 1 个 clean diff（应当基本无有效 finding）
+- 其余 case 优先覆盖：
+  - 小型、意图清晰的修复
+  - 中等体量、跨 3-5 文件的真实改动
+  - 工程性更强、带测试或系统性约束的 bugfix
 
 ## Adjudication 记录格式
 
@@ -97,6 +137,15 @@ summary:
 1. **模型是否能稳定给出真问题？** → valid rate 是否 > 50%
 2. **需要哪些 context 才能给出真问题？** → 哪些 case 因为缺 context 导致 finding 质量差
 3. **主要噪音来自 prompt 还是 pack 缺失？** → invalid finding 的根因分类
+
+这些结论不应只停留在口头总结。Prompt Lab 结束时，需同步更新 `prompt-lab/summary.md`，至少按 case 记录：
+
+- fixture_id
+- source_commit / source_repo
+- 是否 clean diff
+- valid_count / invalid_count / unclear_count
+- 缺失 context 观察
+- 噪音归因（prompt / pack / 其他）
 
 ## Gate
 

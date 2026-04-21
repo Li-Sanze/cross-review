@@ -8,6 +8,16 @@ CrossReview 是一个 **验证型 incubator**：把手工 fresh-session cross-re
 
 同一模型新开 session（无生产过程上下文）就能发现问题——价值来源是 **context isolation**，不是 model diversity。
 
+## 产品边界
+
+CrossReview 的长期目标不是只做 "code diff reviewer"，而是做一个面向**任意可审查 artifact** 的上下文隔离验证框架。代码 diff 只是第一类落地对象；analysis、plan、design、review-result 等 artifact 也可以成为 cross-review 的验证目标。
+
+但 **v0 和当前 Prompt Lab 明确只验证 `code_diff`**：
+
+- 当前 CLI / schema / release gate 只覆盖 `code_diff`
+- 非 diff artifact 的交叉验证，属于 workflow 模式的真实使用场景，或未来 artifact 扩展方向
+- 非 diff artifact 的结果 **不计入** 当前 Prompt Lab / v0 release gate 指标
+
 ## v0 范围
 
 ```
