@@ -2,7 +2,9 @@
 
 ## 目标
 
-验证 "fresh LLM reviewer 能否从 ReviewPack 中稳定产出真 finding"，如果成立则实现 v0 CLI。
+验证 "fresh LLM reviewer 能否从 ReviewPack 中稳定产出真 finding"，如果成立则实现 v0 verification core + minimal CLI surface。
+
+默认产品语义优先支持 host-integrated same-model fresh review；standalone provider backend 作为 fallback / portable mode。v0 当前分支可先落地 standalone backend，但这不改变默认用户路径判断。
 
 ## 上游 Scope
 

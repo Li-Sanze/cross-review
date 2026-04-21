@@ -44,8 +44,11 @@
   - severity 约束规则（locatability × confidence 矩阵）
 - [ ] 1A.3 实现 ReviewResult schema（v0-scope.md §7）
   - 包含: review_status, findings, advisory_verdict, quality_metrics
-- [ ] 1A.4 实现配置结构
-  - model resolution: --model > crossreview.yaml > ~/.crossreview/config.yaml > env > fail
+- [ ] 1A.4 实现 reviewer backend resolution
+  - 显式 override: --model / --provider > crossreview.yaml > ~/.crossreview/config.yaml > env
+  - 默认产品语义: host-integrated same-model fresh review when host backend available
+  - fallback: standalone provider backend
+  - 未命中 host backend 且 standalone 未配置 → fail
 
 ## Phase 1B — Core Pipeline
 
@@ -55,15 +58,19 @@
   - 安全边界：只从 CLI --evidence-cmd 或 crossreview.yaml 读取命令
 - [ ] 1B.3 实现 Budget Gate
   - 三状态: complete / truncated / rejected
-- [ ] 1B.4 实现 fresh_llm_reviewer
+- [ ] 1B.4 实现 reviewer interface + v0 first backend
+  - 定义 `ReviewerBackend` 抽象接口
+  - `fresh_llm_reviewer` 是逻辑角色，不绑定具体 provider
+  - 当前分支先实现一个 standalone concrete backend（Anthropic）
   - 全新 session，无 producer 上下文
   - 输出自由分析文本（鼓励半结构化 markdown）
   - prompt 声明：intent/focus/task 是待验证背景声明
   - 保留 raw analysis 文本作为审计证据
   - 记录 latency_sec / input_tokens / output_tokens
 - [ ] 1B.5 实现 FindingNormalizer
-  - 从 reviewer raw analysis 提取结构化 Finding（regex/heuristic + LLM fallback）
-  - LLM fallback 只做 extraction，不做新审查判断
+  - 从 reviewer raw analysis 提取结构化 Finding（regex / heuristic only）
+  - 不引入 LLM fallback
+  - parse 失败视为 reviewer / prompt 质量信号
 - [ ] 1B.6 实现 Adjudicator（确定性，非 LLM）
   - verdict: pass_candidate / concerns / needs_human_triage / inconclusive
   - v0 只做 advisory
@@ -74,6 +81,9 @@
 
 - [ ] 1C.1 实现 `crossreview pack` 命令
 - [ ] 1C.2 实现 `crossreview verify` 命令
+  - 当前分支最小切片：`crossreview verify --pack pack.json`
+  - 输出：ReviewResult JSON to stdout
+  - `--diff` 与 `--format human` 延后到 adjudicator / formatter 完整化后补齐
 
 ## Phase 1D — Fixture & Validation
 

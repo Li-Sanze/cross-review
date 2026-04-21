@@ -78,11 +78,28 @@ cli/
 └── main.py             # crossreview pack / verify 命令
 ```
 
+### Reviewer Backend Strategy
+
+`fresh_llm_reviewer` 是逻辑角色，不等同于某个固定 provider SDK 调用。
+
+v0 采用两层设计：
+
+1. `ReviewerBackend` 抽象接口
+2. 具体 backend 实现
+
+默认优先级：
+
+1. 若宿主提供 fresh-session reviewer backend，则优先使用 host-integrated same-model fresh review
+2. 否则使用 standalone provider backend
+3. 若用户显式指定 provider / model，则按显式 override 解析
+
+v0 当前分支的首个 concrete backend 可先实现 `AnthropicReviewerBackend`，用于跑通 standalone `crossreview verify`。后续宿主接入只需新增 `HostSessionReviewerBackend`，不改变 budget / normalizer / adjudicator 链路。
+
 ### FindingNormalizer 关键约束
 
-normalizer 的 LLM fallback **只做 extraction，不做新的审查判断**。否则 "reviewer 只有一种 + adjudicator deterministic" 的语义会被稀释。
+v0 的 normalizer 只做 deterministic extraction，不引入 LLM fallback。
 
 具体：
-- 首选路径：regex/heuristic 从半结构化 markdown 提取 Finding
-- LLM fallback：只在 heuristic 解析失败时使用
-- LLM fallback prompt 限定为 "Extract findings from the following analysis into JSON format. Do NOT add new findings or judgments."
+- 首选且唯一实现路径：regex / heuristic 从 reviewer 的半结构化 markdown 中提取 Finding
+- parse 失败视为 reviewer / prompt 质量信号
+- 不允许通过第二次 LLM 调用补 extraction，否则会稀释 "reviewer 只有一种 + adjudicator deterministic" 的语义
