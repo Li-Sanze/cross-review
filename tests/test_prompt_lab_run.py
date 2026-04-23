@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from crossreview.pack import assemble_pack
+from crossreview.core.prompt import PRODUCT_REVIEWER_PROMPT_SOURCE, PRODUCT_REVIEWER_PROMPT_VERSION
 from crossreview.schema import ReviewResult, ReviewerMeta, SCHEMA_VERSION
 
 
@@ -96,7 +97,11 @@ class TestPromptLabRun:
             schema_version=SCHEMA_VERSION,
             artifact_fingerprint=pack.artifact_fingerprint,
             pack_fingerprint=pack.pack_fingerprint,
-            reviewer=ReviewerMeta(model="claude-sonnet-4-20250514"),
+            reviewer=ReviewerMeta(
+                model="claude-sonnet-4-20250514",
+                prompt_source=PRODUCT_REVIEWER_PROMPT_SOURCE,
+                prompt_version=PRODUCT_REVIEWER_PROMPT_VERSION,
+            ),
         )
 
         with (
@@ -110,6 +115,8 @@ class TestPromptLabRun:
         output = json.loads((case_dir / "run-test.json").read_text(encoding="utf-8"))
         assert output["schema_version"] == "0.1-alpha"
         assert output["reviewer"]["model"] == "claude-sonnet-4-20250514"
+        assert output["reviewer"]["prompt_source"] == PRODUCT_REVIEWER_PROMPT_SOURCE
+        assert output["reviewer"]["prompt_version"] == PRODUCT_REVIEWER_PROMPT_VERSION
 
     def test_api_only_passes_cli_flags_to_resolve_reviewer_config(self, tmp_path):
         runner = _load_prompt_lab_run()

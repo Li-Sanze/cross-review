@@ -7,6 +7,21 @@
 > **Adjudication standard**: strict — valid 仅限当前 diff 可见且可归责的真实问题；observation 桶不计入 precision
 > **隔离级别**: tool-assisted (见 [隔离级别说明](#隔离级别说明))
 
+## Prompt Provenance
+
+Prompt Lab has separate historical and product prompt seams:
+
+| Run family | Runner mode | Prompt source | Version | Status |
+|------------|-------------|---------------|---------|--------|
+| Round 1 | manual/tool-assisted | `prompt-lab/prompt-template.md` | v0 | historical |
+| Round 2 | manual/tool-assisted | `prompt-lab/prompt-template.md` | v0.2 | latest adjudicated summary below |
+| Round 3 | manual/tool-assisted | not reproducibly checked in | v0.3 | historical data only; do not use as a product baseline |
+| Round 4 | `run.py --api-only` | `crossreview/core/prompt.py` | product/v0.1 | planned product-prompt baseline |
+
+Round 3 data may still inform prompt design, but its exact `template: v0.3` file is absent from the repository. API-only runs intentionally use the canonical product prompt, not `prompt-lab/prompt-template.md`; their `ReviewResult.reviewer` metadata must record `prompt_source: "product"` and `prompt_version: "v0.1"`.
+
+Product prompt `v0.1` includes the Round 2 core improvements (Findings/Observations split, diff-only constraint, semantic equivalence) and adds a shell/command continuation instruction targeted at the Round 2 recall gap. Because this changes the prompt, new `run-r4.json` outputs require new `adjudication-r4.yaml`; `adjudication-r3.yaml` must not be reused.
+
 ## Adjudication Schema
 
 > **口径定义**: valid = 当前 diff 可见且可归责的真实问题（含 introduced 和 preexisting_visible）
@@ -125,8 +140,8 @@ actionability:      1.00            1.00            ±0          >= 0.90 ✓ (wa
 
 ## 待办
 
-- [ ] 001 mf-002 recall gap — 考虑在 prompt-template 增加 "multiline statement continuation" 专项指引
-- [ ] Context isolation 方法改进 — 实现 render-only 纯隔离级别（API-only reviewer，无文件系统访问）
+- [ ] Round 4 — 用 `run.py --api-only --label r4` 对 13 个 case 跑 product/v0.1，生成结构化 `run-r4.json`
+- [ ] Round 4 adjudication — 基于 `run-r4.json` 重做 `adjudication-r4.yaml`，不复用 R3 判定
+- [ ] Context isolation 方法改进 — API-only reviewer 已无文件系统工具访问；继续记录 `prompt_source/prompt_version` 以防混算
 - [ ] 边界 finding 口径校准 — 002-f-002 / 003-f-002 在扩大 fixture 后重新评估
 - [ ] 扩大 fixture 数量至 20+ 以满足 release gate
-- [ ] Round 3 (如果对 prompt 做进一步修改)

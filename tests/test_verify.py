@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from crossreview.core.prompt import PRODUCT_REVIEWER_PROMPT_SOURCE, PRODUCT_REVIEWER_PROMPT_VERSION
 from crossreview.reviewer import ReviewResponse
 from crossreview.schema import FileMeta, ReviewerConfig
 from crossreview.budget import ABSOLUTE_MAX_FIRST_FILE_CHARS
@@ -24,11 +25,15 @@ diff --git a/hello.py b/hello.py
 @dataclass
 class FakeBackend:
     raw_analysis: str
+    prompt_source: str | None = PRODUCT_REVIEWER_PROMPT_SOURCE
+    prompt_version: str | None = PRODUCT_REVIEWER_PROMPT_VERSION
 
     def review(self, _pack, config: ReviewerConfig) -> ReviewResponse:
         return ReviewResponse(
             raw_analysis=self.raw_analysis,
             model=config.model,
+            prompt_source=self.prompt_source,
+            prompt_version=self.prompt_version,
             latency_sec=0.1,
             input_tokens=10,
             output_tokens=20,
@@ -73,6 +78,8 @@ class TestRunVerifyPack:
 
         assert result.review_status.value == "complete"
         assert result.reviewer.model == "claude-sonnet-4-20250514"
+        assert result.reviewer.prompt_source == PRODUCT_REVIEWER_PROMPT_SOURCE
+        assert result.reviewer.prompt_version == PRODUCT_REVIEWER_PROMPT_VERSION
         assert result.reviewer.raw_analysis
         assert result.raw_findings[0].id == "f-001"
         assert result.findings[0].category == "spec_mismatch"
