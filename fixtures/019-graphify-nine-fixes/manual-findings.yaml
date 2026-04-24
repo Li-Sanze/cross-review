@@ -1,9 +1,26 @@
 fixture_id: 019-graphify-nine-fixes
 pack_fingerprint: fe03417aabe65a4650dd7ce54107189e87cda7096a3850773c3d3022f0ba80b2
-manual_findings:
+baseline_status: assisted
+source: assistant_fresh_session_human_approved
+reviewer_model: gpt-5
+reviewed_at: '2026-04-24T14:01:10Z'
+context_items:
+- type: diff
+  path_or_desc: fixtures/019-graphify-nine-fixes/diff.patch
+  required: true
+  covered_by_pack: true
+- type: metadata
+  path_or_desc: fixtures/019-graphify-nine-fixes/pack.json
+  required: true
+  covered_by_pack: true
+findings:
 - id: mf-001
-  summary: Global label normalization strips dots and parens, causing silent overwrites
-    when distinct labels normalize to the same key
+  summary: The new cross-file call pass suppresses inferred calls edges whenever any
+    other edge already exists between the same two nodes.
   file: graphify/extract.py
   severity_estimate: medium
-  covered_by_pack: true
+- id: mf-002
+  summary: Cross-file call resolution is now ambiguous for duplicate symbol names because
+    the global lookup keeps only one node per normalized label.
+  file: graphify/extract.py
+  severity_estimate: medium

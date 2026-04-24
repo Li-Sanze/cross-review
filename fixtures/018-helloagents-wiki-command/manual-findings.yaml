@@ -1,3 +1,16 @@
 fixture_id: 018-helloagents-wiki-command
 pack_fingerprint: c9e3c3988537f0e84e4794affc8cc6b22bd8f27f3ba03a5d2dc4b225414aa519
-manual_findings: []
+baseline_status: assisted
+source: assistant_fresh_session_human_approved
+reviewer_model: gpt-5
+reviewed_at: '2026-04-24T14:01:10Z'
+context_items:
+- type: diff
+  path_or_desc: fixtures/018-helloagents-wiki-command/diff.patch
+  required: true
+  covered_by_pack: true
+- type: metadata
+  path_or_desc: fixtures/018-helloagents-wiki-command/pack.json
+  required: true
+  covered_by_pack: true
+findings: []

@@ -1,3 +1,21 @@
 fixture_id: 020-graphify-cluster-keyerror
 pack_fingerprint: 1ad592eaa74a5a45d2b63f1eb2365656fe2a0f8f1fca1688e73539ed88bbd777
-manual_findings: []
+baseline_status: assisted
+source: assistant_fresh_session_human_approved
+reviewer_model: gpt-5
+reviewed_at: '2026-04-24T14:01:10Z'
+context_items:
+- type: diff
+  path_or_desc: fixtures/020-graphify-cluster-keyerror/diff.patch
+  required: true
+  covered_by_pack: true
+- type: metadata
+  path_or_desc: fixtures/020-graphify-cluster-keyerror/pack.json
+  required: true
+  covered_by_pack: true
+findings:
+- id: mf-001
+  summary: The merged update still discards previously extracted hyperedges because
+    the rewritten .graphify_extract.json only copies hyperedges from new_extraction.
+  file: graphify/skill.md
+  severity_estimate: medium

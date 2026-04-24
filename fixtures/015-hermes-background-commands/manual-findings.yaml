@@ -1,3 +1,21 @@
 fixture_id: 015-hermes-background-commands
 pack_fingerprint: e9ff4418d6df65a217572bd9f8ee91ae6808c007260e81a79f291e19c05d14b0
-manual_findings: []
+baseline_status: assisted
+source: assistant_fresh_session_human_approved
+reviewer_model: gpt-5
+reviewed_at: '2026-04-24T14:01:10Z'
+context_items:
+- type: diff
+  path_or_desc: fixtures/015-hermes-background-commands/diff.patch
+  required: true
+  covered_by_pack: true
+- type: metadata
+  path_or_desc: fixtures/015-hermes-background-commands/pack.json
+  required: true
+  covered_by_pack: true
+findings:
+- id: mf-001
+  summary: The new foreground '&' guard rejects quoted literals because it scans the
+    raw command string instead of shell syntax.
+  file: tools/terminal_tool.py
+  severity_estimate: medium

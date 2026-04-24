@@ -1,3 +1,21 @@
 fixture_id: 016-hermes-gemini-routing
 pack_fingerprint: fbe4358c758e5a68c260439a526b15433ebc34fb2b33d7e3b89a0bb2c119d731
-manual_findings: []
+baseline_status: assisted
+source: assistant_fresh_session_human_approved
+reviewer_model: gpt-5
+reviewed_at: '2026-04-24T14:01:10Z'
+context_items:
+- type: diff
+  path_or_desc: fixtures/016-hermes-gemini-routing/diff.patch
+  required: true
+  covered_by_pack: true
+- type: metadata
+  path_or_desc: fixtures/016-hermes-gemini-routing/pack.json
+  required: true
+  covered_by_pack: true
+findings:
+- id: mf-001
+  summary: _build_keepalive_http_client drops the 600-second read timeout because
+    GeminiNativeClient.__init__ short-circuits when the client arg is already set.
+  file: hermes/providers/gemini_native.py
+  severity_estimate: high
