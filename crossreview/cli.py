@@ -1,4 +1,4 @@
-"""CrossReview CLI — ``crossreview pack`` / ``crossreview verify``.
+"""CrossReview CLI — ``crossreview pack`` / ``crossreview verify`` / ``crossreview render-prompt`` / ``crossreview ingest``.
 
 Usage::
 
@@ -6,6 +6,8 @@ Usage::
     crossreview pack --diff HEAD~1 --intent "fix auth" --focus auth > pack.json
     crossreview pack --diff HEAD~1 --task ./task.md --context ./plan.md > pack.json
     crossreview verify --pack pack.json
+    crossreview render-prompt --pack pack.json > prompt.md
+    crossreview ingest --raw-analysis raw.md --pack pack.json --model claude-sonnet-4-20250514
 """
 
 from __future__ import annotations
@@ -15,6 +17,11 @@ import json
 import sys
 
 from .config import ConfigError, resolve_reviewer_config
+from .core.prompt import (
+    get_default_reviewer_template,
+    render_reviewer_prompt,
+)
+from .ingest import run_ingest
 from .pack import (
     GitDiffError,
     assemble_pack,
@@ -96,6 +103,52 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="ENV_VAR",
         help="Override API key environment variable name.",
     )
+
+    # --- render-prompt ---
+    rp_p = sub.add_parser(
+        "render-prompt",
+        help="Render the canonical reviewer prompt from a ReviewPack.",
+    )
+    rp_p.add_argument(
+        "--pack",
+        required=True,
+        metavar="FILE",
+        help="Path to a ReviewPack JSON file.",
+    )
+    rp_p.add_argument(
+        "--template",
+        default=None,
+        metavar="FILE",
+        help="Custom prompt template file (default: built-in product/v0.1).",
+    )
+
+    # --- ingest ---
+    ingest_p = sub.add_parser(
+        "ingest",
+        help="Ingest raw analysis text from a host-integrated review and emit ReviewResult JSON.",
+    )
+    ingest_p.add_argument(
+        "--raw-analysis",
+        required=True,
+        metavar="FILE",
+        help="Path to raw analysis text file, or '-' for stdin.",
+    )
+    ingest_p.add_argument(
+        "--pack",
+        required=True,
+        metavar="FILE",
+        help="Path to the original ReviewPack JSON file.",
+    )
+    ingest_p.add_argument(
+        "--model",
+        required=True,
+        help="Model used by the host (e.g. 'claude-sonnet-4-20250514' or 'host_unknown').",
+    )
+    ingest_p.add_argument("--prompt-source", default=None, help="Prompt source identifier.")
+    ingest_p.add_argument("--prompt-version", default=None, help="Prompt version identifier.")
+    ingest_p.add_argument("--latency-sec", type=float, default=None, help="Host-measured LLM latency in seconds.")
+    ingest_p.add_argument("--input-tokens", type=int, default=None, help="Host-reported input token count.")
+    ingest_p.add_argument("--output-tokens", type=int, default=None, help="Host-reported output token count.")
 
     return parser
 
@@ -237,6 +290,94 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_render_prompt(args: argparse.Namespace) -> int:
+    """Execute ``crossreview render-prompt --pack pack.json``."""
+    pack = _load_pack(args.pack)
+    if pack is None:
+        return 1
+
+    violations = validate_review_pack(pack)
+    if violations:
+        print(f"error: invalid ReviewPack: {', '.join(violations)}", file=sys.stderr)
+        return 1
+
+    # Load template
+    template_source = "product/v0.1"
+    if args.template:
+        try:
+            template = open(args.template, encoding="utf-8").read()
+            template_source = args.template
+        except OSError as exc:
+            print(f"error: cannot read template file: {exc}", file=sys.stderr)
+            return 1
+        except UnicodeDecodeError as exc:
+            print(f"error: template file is not valid UTF-8: {exc}", file=sys.stderr)
+            return 1
+    else:
+        template = get_default_reviewer_template()
+
+    rendered = render_reviewer_prompt(template, pack)
+    print(rendered)
+    print(
+        f"crossreview render-prompt: {len(rendered)} chars, template={template_source}",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    """Execute ``crossreview ingest --raw-analysis FILE --pack pack.json --model MODEL``."""
+    pack = _load_pack(args.pack)
+    if pack is None:
+        return 1
+
+    violations = validate_review_pack(pack)
+    if violations:
+        print(f"error: invalid ReviewPack: {', '.join(violations)}", file=sys.stderr)
+        return 1
+
+    # Read raw analysis
+    if args.raw_analysis == "-":
+        raw_analysis = sys.stdin.read()
+    else:
+        try:
+            raw_analysis = open(args.raw_analysis, encoding="utf-8").read()
+        except OSError as exc:
+            print(f"error: cannot read raw analysis file: {exc}", file=sys.stderr)
+            return 1
+        except UnicodeDecodeError as exc:
+            print(f"error: raw analysis file is not valid UTF-8: {exc}", file=sys.stderr)
+            return 1
+
+    if not raw_analysis.strip():
+        print("error: raw analysis is empty.", file=sys.stderr)
+        return 1
+
+    result = run_ingest(
+        pack,
+        raw_analysis,
+        model=args.model,
+        prompt_source=args.prompt_source,
+        prompt_version=args.prompt_version,
+        latency_sec=args.latency_sec,
+        input_tokens=args.input_tokens,
+        output_tokens=args.output_tokens,
+    )
+
+    violations = validate_review_result(result)
+    if violations:
+        print(f"error: internal invalid ReviewResult: {', '.join(violations)}", file=sys.stderr)
+        return 1
+
+    print(review_result_to_json(result))
+    print(
+        f"crossreview ingest: review_status={result.review_status.value}, "
+        f"findings={len(result.findings)}, model={result.reviewer.model}",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -245,6 +386,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_pack(args)
     if args.command == "verify":
         return _cmd_verify(args)
+    if args.command == "render-prompt":
+        return _cmd_render_prompt(args)
+    if args.command == "ingest":
+        return _cmd_ingest(args)
 
     parser.print_help()
     return 1

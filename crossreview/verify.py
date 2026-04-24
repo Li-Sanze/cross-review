@@ -27,7 +27,7 @@ from .schema import (
 )
 
 
-def _build_result(
+def build_review_result(
     *,
     pack: ReviewPack,
     reviewer_model: str,
@@ -82,6 +82,10 @@ def _build_result(
             chars_limit=chars_limit,
         ),
     )
+
+
+# Internal alias so existing tests that reference _build_result keep working.
+_build_result = build_review_result
 
 
 def run_verify_pack(
