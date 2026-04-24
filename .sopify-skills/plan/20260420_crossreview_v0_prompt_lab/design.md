@@ -56,27 +56,29 @@ prompt-lab/
 
 ---
 
-## Phase 1 工程结构预览
-
-> 以下是 Phase 1 进入后的目标结构，当前不实现。
+## Phase 1 工程结构（已实现）
 
 ```
 crossreview/
 ├── __init__.py
 ├── schema.py           # ReviewPack / Finding / ReviewResult dataclass
 ├── pack.py             # pack 构建逻辑
-├── evidence.py         # deterministic_evidence collector
 ├── budget.py           # budget gate
-├── reviewer.py         # fresh_llm_reviewer
+├── reviewer.py         # ReviewerBackend 接口 + Anthropic standalone
 ├── normalizer.py       # FindingNormalizer（从 raw analysis 提取 Finding）
 ├── adjudicator.py      # deterministic adjudicator
-├── formatter.py        # JSON / human-readable output
-└── config.py           # 配置加载
-
-cli/
-├── __init__.py
-└── main.py             # crossreview pack / verify 命令
+├── ingest.py           # host-integrated ingest pipeline（raw analysis → ReviewResult）
+├── config.py           # 配置加载（CLI > YAML > env 优先级链）
+├── cli.py              # crossreview pack / verify / render-prompt / ingest 命令
+└── core/
+    ├── __init__.py
+    └── prompt.py        # canonical reviewer prompt 模板 + 渲染（product/v0.1）
 ```
+
+### 待实现模块
+
+- `evidence.py` — deterministic evidence collector（命令执行 + 结果收集）
+- `formatter.py` — human-readable output formatter (`--format human`)
 
 ### Reviewer Backend Strategy
 
@@ -84,16 +86,30 @@ cli/
 
 v0 采用两层设计：
 
-1. `ReviewerBackend` 抽象接口
+1. `ReviewerBackend` 抽象接口（`crossreview/reviewer.py`）
 2. 具体 backend 实现
 
-默认优先级：
+**两种执行路径**：
 
-1. 若宿主提供 fresh-session reviewer backend，则优先使用 host-integrated same-model fresh review
-2. 否则使用 standalone provider backend
-3. 若用户显式指定 provider / model，则按显式 override 解析
+| 路径 | 使用场景 | CLI 命令 |
+|------|----------|----------|
+| **Host-integrated** | 宿主（Copilot CLI / Claude Code 等）在隔离上下文中执行 | `render-prompt` → 宿主执行 → `ingest` |
+| **Standalone** | 直接调用 LLM API | `verify` |
 
-v0 当前分支的首个 concrete backend 可先实现 `AnthropicReviewerBackend`，用于跑通 standalone `crossreview verify`。后续宿主接入只需新增 `HostSessionReviewerBackend`，不改变 budget / normalizer / adjudicator 链路。
+Host-integrated 路径不需要实现 Python `ReviewerBackend` 类。宿主通过 CLI 管道完成集成：
+
+```bash
+# 1. 渲染 canonical prompt
+crossreview render-prompt --pack pack.json > prompt.md
+
+# 2. 宿主在隔离上下文执行 prompt（宿主自行实现）
+host_execute_in_fresh_session prompt.md > raw-output.md
+
+# 3. 回传 raw analysis → ReviewResult
+crossreview ingest --raw-analysis raw-output.md --pack pack.json --model host_model
+```
+
+Standalone 路径使用 `ReviewerBackend` 接口 + 具体 provider 实现（当前：`AnthropicReviewerBackend`）。
 
 ### FindingNormalizer 关键约束
 

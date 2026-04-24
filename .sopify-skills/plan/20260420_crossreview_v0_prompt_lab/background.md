@@ -12,13 +12,21 @@
 
 ## 当前阶段
 
-**Phase 0.5 — Prompt Lab**
+**Phase 1 — 核心管线已完成，进入 Phase 1D (Fixture & Validation)**
 
-在搭建完整工程框架前，先用 3-5 个真实 diff 验证 reviewer prompt 质量。如果 raw output 质量不行，后面的 schema / adjudicator / CLI 都是在包装失败。
+- Phase 0.5 Prompt Lab — ✅ 已通过 gate，raw finding 质量可接受。
+- Phase 1A Schema & Config — ✅ 全部完成。
+- Phase 1B Core Pipeline — ✅ 大部分完成（evidence collector 和 output formatter 除外）。
+- Phase 1C CLI — ✅ pack / verify / render-prompt / ingest 全部完成。
+- Phase 1D Fixture & Validation — 🔜 进行中，eval harness 已有基础框架。
+
+Host-integrated CLI 通道（render-prompt + ingest）已实现。宿主集成不需要实现 Python `ReviewerBackend`；集成方式是 `crossreview render-prompt` → 宿主隔离执行 → `crossreview ingest` 回传。
 
 ## Gate
 
-Prompt Lab 通过（模型能稳定给出真问题 + 噪音来源可控）→ 进入 Phase 1。
+Prompt Lab 通过（模型能稳定给出真问题 + 噪音来源可控）→ ✅ 已进入 Phase 1。
+
+Phase 1 完成 gate：v0 release gates（v0-scope.md §12）达标 → 产品化。
 
 ## 非目标
 

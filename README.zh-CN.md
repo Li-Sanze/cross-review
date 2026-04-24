@@ -171,10 +171,10 @@ Reviewer 后端有两种模式：
 
 | 模式 | 说明 | 依赖 |
 |------|------|------|
-| **Host-integrated** *（计划中）* | 宿主提供独立 reviewer backend；CrossReview 只消费结果 | CrossReview 侧无额外 SDK |
+| **Host-integrated** *（CLI 已实现）* | 宿主在隔离上下文（新会话 / sub-agent）中渲染 reviewer prompt，再通过 `render-prompt + ingest` 流程把原始分析文本回传给 normalizer + adjudicator | CrossReview 侧无额外 SDK |
 | **Standalone** *（已实现）* | CLI 直接调 LLM API | `crossreview[anthropic]` + reviewer config + API key |
 
-Host-integrated 是计划中的默认产品路径。当前 `main` 分支实际只提供 standalone verify。
+Host-integrated 是计划中的默认产品路径。宿主不需要实现 Python `ReviewerBackend`；集成方式是 `render-prompt + ingest`，由宿主负责在 fresh context 中执行 canonical prompt，再把原始分析文本回传。
 
 ## 命令
 
@@ -214,6 +214,40 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 | `--provider TEXT` | 覆盖 provider（当前仅 `anthropic`） |
 | `--api-key-env VAR` | 覆盖 API key 环境变量名 |
 
+### `crossreview render-prompt`
+
+```bash
+crossreview render-prompt --pack pack.json > prompt.md
+crossreview render-prompt --pack pack.json --template custom-template.md > prompt.md
+```
+
+将 ReviewPack 渲染为完整的 canonical reviewer prompt，供宿主在隔离上下文中直接喂给 LLM。不调用 LLM，不需要 API key。
+
+| 参数 | 说明 |
+|------|------|
+| `--pack FILE` | ReviewPack JSON 文件路径 |
+| `--template FILE` | 自定义 prompt 模板（缺省：内置 product/v0.1） |
+
+### `crossreview ingest`
+
+```bash
+crossreview ingest --raw-analysis raw.md --pack pack.json --model claude-sonnet-4-20250514
+crossreview ingest --raw-analysis - --pack pack.json --model host_unknown --prompt-source product --prompt-version v0.1
+```
+
+接收宿主在隔离上下文中执行后的 raw analysis 文本，经 normalizer + adjudicator 生成标准 ReviewResult JSON。这是 host-integrated 路径的"后半段"——不调用 LLM，不需要 API key。
+
+| 参数 | 说明 |
+|------|------|
+| `--raw-analysis FILE` | raw analysis 文件路径；`-` 读 stdin |
+| `--pack FILE` | 原始 ReviewPack JSON |
+| `--model TEXT` | 宿主使用的模型名（不知道时传 `host_unknown`） |
+| `--prompt-source TEXT` | prompt 来源标识（可选） |
+| `--prompt-version TEXT` | prompt 版本标识（可选） |
+| `--latency-sec FLOAT` | 宿主侧 LLM 调用耗时（可选） |
+| `--input-tokens INT` | 宿主侧 input token 计数（可选） |
+| `--output-tokens INT` | 宿主侧 output token 计数（可选） |
+
 ## 当前状态
 
 | 组件 | 状态 | 说明 |
@@ -225,6 +259,8 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 | Normalizer | ✅ 完成 | 基于规则的结构化发现提取 |
 | Adjudicator | ✅ 完成 | 基于规则的建议性判定 |
 | Verify CLI | ✅ 完成 | `crossreview verify --pack` |
+| Render Prompt CLI | ✅ 完成 | `crossreview render-prompt --pack`（host-integrated 前半段） |
+| Ingest CLI | ✅ 完成 | `crossreview ingest --raw-analysis --pack --model`（host-integrated 后半段） |
 | Evidence Collector | 🔜 待做 | ReviewPack.evidence 通路已有，空 evidence 可正常运行 |
 | Eval Harness | 🔜 规划中 | 基于 fixture 的 release gate 验证 |
 | 可读输出 | 🔜 待做 | `--format human` |

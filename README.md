@@ -171,10 +171,10 @@ Two reviewer backend modes:
 
 | Mode | Description | Dependency |
 |------|-------------|------------|
-| **Host-integrated** *(planned)* | Host provides an isolated reviewer backend; CrossReview only consumes the result | No extra SDK on the CrossReview side |
+| **Host-integrated** *(CLI implemented)* | The host renders the reviewer prompt in an isolated context (fresh session / sub-agent), then feeds raw analysis back to CrossReview's normalizer + adjudicator through the `render-prompt + ingest` CLI commands | No extra SDK on the CrossReview side |
 | **Standalone** *(implemented)* | CLI calls the LLM API directly | `crossreview[anthropic]` + reviewer config + API key |
 
-Host-integrated is the planned default product path. The current main branch ships standalone verify only.
+Host-integrated is the planned default product path. The host does NOT need to implement a Python `ReviewerBackend`; the integration path is `render-prompt + ingest`, with the host responsible for executing the canonical prompt in a fresh context and feeding raw analysis back.
 
 ## Commands
 
@@ -214,6 +214,40 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 | `--provider TEXT` | Override provider (currently `anthropic` only) |
 | `--api-key-env VAR` | Override API key env variable name |
 
+### `crossreview render-prompt`
+
+```bash
+crossreview render-prompt --pack pack.json > prompt.md
+crossreview render-prompt --pack pack.json --template custom-template.md > prompt.md
+```
+
+Renders a ReviewPack into the full canonical reviewer prompt for the host to execute in an isolated context. No LLM call, no API key needed.
+
+| Flag | Description |
+|------|-------------|
+| `--pack FILE` | Path to ReviewPack JSON |
+| `--template FILE` | Custom prompt template (default: built-in product/v0.1) |
+
+### `crossreview ingest`
+
+```bash
+crossreview ingest --raw-analysis raw.md --pack pack.json --model claude-sonnet-4-20250514
+crossreview ingest --raw-analysis - --pack pack.json --model host_unknown --prompt-source product --prompt-version v0.1
+```
+
+Takes raw analysis text from a host-integrated review session and produces a standard ReviewResult JSON via normalizer + adjudicator. No LLM call, no API key needed.
+
+| Flag | Description |
+|------|-------------|
+| `--raw-analysis FILE` | Raw analysis file path; `-` for stdin |
+| `--pack FILE` | Original ReviewPack JSON |
+| `--model TEXT` | Host model name (`host_unknown` if unknown) |
+| `--prompt-source TEXT` | Prompt source identifier (optional) |
+| `--prompt-version TEXT` | Prompt version identifier (optional) |
+| `--latency-sec FLOAT` | Host-measured LLM latency (optional) |
+| `--input-tokens INT` | Host-reported input token count (optional) |
+| `--output-tokens INT` | Host-reported output token count (optional) |
+
 ## Status
 
 | Component | Status | Notes |
@@ -225,6 +259,8 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 | Normalizer | ✅ Done | Rule-based finding extraction |
 | Adjudicator | ✅ Done | Rule-based advisory verdict |
 | Verify CLI | ✅ Done | `crossreview verify --pack` |
+| Render Prompt CLI | ✅ Done | `crossreview render-prompt --pack` (host-integrated front half) |
+| Ingest CLI | ✅ Done | `crossreview ingest --raw-analysis --pack --model` (host-integrated back half) |
 | Evidence Collector | 🔜 Next | ReviewPack.evidence path exists, empty evidence works |
 | Eval Harness | 🔜 Planned | Release gate validation with fixtures |
 | Human-readable Output | 🔜 Next | `--format human` |
