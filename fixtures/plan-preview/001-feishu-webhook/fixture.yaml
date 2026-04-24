@@ -1,0 +1,6 @@
+fixture_id: plan-001-feishu-webhook
+artifact_type: plan          # v0 不消费；v1+ 实现 plan 验证时启用
+pool: plan_preview
+source_project: ai-daily-brief
+source_plan: .sopify-skills/plan/20260424_feishu_webhook/
+captured_at: "2026-04-24"

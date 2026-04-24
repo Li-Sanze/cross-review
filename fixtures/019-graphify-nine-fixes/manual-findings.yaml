@@ -1,0 +1,9 @@
+fixture_id: 019-graphify-nine-fixes
+pack_fingerprint: fe03417aabe65a4650dd7ce54107189e87cda7096a3850773c3d3022f0ba80b2
+manual_findings:
+- id: mf-001
+  summary: Global label normalization strips dots and parens, causing silent overwrites
+    when distinct labels normalize to the same key
+  file: graphify/extract.py
+  severity_estimate: medium
+  covered_by_pack: true

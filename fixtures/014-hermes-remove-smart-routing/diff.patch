@@ -1,0 +1,1145 @@
+diff --git a/agent/smart_model_routing.py b/agent/smart_model_routing.py
+deleted file mode 100644
+index 6d482be2..00000000
+--- a/agent/smart_model_routing.py
++++ /dev/null
+@@ -1,195 +0,0 @@
+-"""Helpers for optional cheap-vs-strong model routing."""
+-
+-from __future__ import annotations
+-
+-import os
+-import re
+-from typing import Any, Dict, Optional
+-
+-from utils import is_truthy_value
+-
+-_COMPLEX_KEYWORDS = {
+-    "debug",
+-    "debugging",
+-    "implement",
+-    "implementation",
+-    "refactor",
+-    "patch",
+-    "traceback",
+-    "stacktrace",
+-    "exception",
+-    "error",
+-    "analyze",
+-    "analysis",
+-    "investigate",
+-    "architecture",
+-    "design",
+-    "compare",
+-    "benchmark",
+-    "optimize",
+-    "optimise",
+-    "review",
+-    "terminal",
+-    "shell",
+-    "tool",
+-    "tools",
+-    "pytest",
+-    "test",
+-    "tests",
+-    "plan",
+-    "planning",
+-    "delegate",
+-    "subagent",
+-    "cron",
+-    "docker",
+-    "kubernetes",
+-}
+-
+-_URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
+-
+-
+-def _coerce_bool(value: Any, default: bool = False) -> bool:
+-    return is_truthy_value(value, default=default)
+-
+-
+-def _coerce_int(value: Any, default: int) -> int:
+-    try:
+-        return int(value)
+-    except (TypeError, ValueError):
+-        return default
+-
+-
+-def choose_cheap_model_route(user_message: str, routing_config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+-    """Return the configured cheap-model route when a message looks simple.
+-
+-    Conservative by design: if the message has signs of code/tool/debugging/
+-    long-form work, keep the primary model.
+-    """
+-    cfg = routing_config or {}
+-    if not _coerce_bool(cfg.get("enabled"), False):
+-        return None
+-
+-    cheap_model = cfg.get("cheap_model") or {}
+-    if not isinstance(cheap_model, dict):
+-        return None
+-    provider = str(cheap_model.get("provider") or "").strip().lower()
+-    model = str(cheap_model.get("model") or "").strip()
+-    if not provider or not model:
+-        return None
+-
+-    text = (user_message or "").strip()
+-    if not text:
+-        return None
+-
+-    max_chars = _coerce_int(cfg.get("max_simple_chars"), 160)
+-    max_words = _coerce_int(cfg.get("max_simple_words"), 28)
+-
+-    if len(text) > max_chars:
+-        return None
+-    if len(text.split()) > max_words:
+-        return None
+-    if text.count("\n") > 1:
+-        return None
+-    if "```" in text or "`" in text:
+-        return None
+-    if _URL_RE.search(text):
+-        return None
+-
+-    lowered = text.lower()
+-    words = {token.strip(".,:;!?()[]{}\"'`") for token in lowered.split()}
+-    if words & _COMPLEX_KEYWORDS:
+-        return None
+-
+-    route = dict(cheap_model)
+-    route["provider"] = provider
+-    route["model"] = model
+-    route["routing_reason"] = "simple_turn"
+-    return route
+-
+-
+-def resolve_turn_route(user_message: str, routing_config: Optional[Dict[str, Any]], primary: Dict[str, Any]) -> Dict[str, Any]:
+-    """Resolve the effective model/runtime for one turn.
+-
+-    Returns a dict with model/runtime/signature/label fields.
+-    """
+-    route = choose_cheap_model_route(user_message, routing_config)
+-    if not route:
+-        return {
+-            "model": primary.get("model"),
+-            "runtime": {
+-                "api_key": primary.get("api_key"),
+-                "base_url": primary.get("base_url"),
+-                "provider": primary.get("provider"),
+-                "api_mode": primary.get("api_mode"),
+-                "command": primary.get("command"),
+-                "args": list(primary.get("args") or []),
+-                "credential_pool": primary.get("credential_pool"),
+-            },
+-            "label": None,
+-            "signature": (
+-                primary.get("model"),
+-                primary.get("provider"),
+-                primary.get("base_url"),
+-                primary.get("api_mode"),
+-                primary.get("command"),
+-                tuple(primary.get("args") or ()),
+-            ),
+-        }
+-
+-    from hermes_cli.runtime_provider import resolve_runtime_provider
+-
+-    explicit_api_key = None
+-    api_key_env = str(route.get("api_key_env") or "").strip()
+-    if api_key_env:
+-        explicit_api_key = os.getenv(api_key_env) or None
+-
+-    try:
+-        runtime = resolve_runtime_provider(
+-            requested=route.get("provider"),
+-            explicit_api_key=explicit_api_key,
+-            explicit_base_url=route.get("base_url"),
+-        )
+-    except Exception:
+-        return {
+-            "model": primary.get("model"),
+-            "runtime": {
+-                "api_key": primary.get("api_key"),
+-                "base_url": primary.get("base_url"),
+-                "provider": primary.get("provider"),
+-                "api_mode": primary.get("api_mode"),
+-                "command": primary.get("command"),
+-                "args": list(primary.get("args") or []),
+-                "credential_pool": primary.get("credential_pool"),
+-            },
+-            "label": None,
+-            "signature": (
+-                primary.get("model"),
+-                primary.get("provider"),
+-                primary.get("base_url"),
+-                primary.get("api_mode"),
+-                primary.get("command"),
+-                tuple(primary.get("args") or ()),
+-            ),
+-        }
+-
+-    return {
+-        "model": route.get("model"),
+-        "runtime": {
+-            "api_key": runtime.get("api_key"),
+-            "base_url": runtime.get("base_url"),
+-            "provider": runtime.get("provider"),
+-            "api_mode": runtime.get("api_mode"),
+-            "command": runtime.get("command"),
+-            "args": list(runtime.get("args") or []),
+-            "credential_pool": runtime.get("credential_pool"),
+-        },
+-        "label": f"smart route → {route.get('model')} ({runtime.get('provider')})",
+-        "signature": (
+-            route.get("model"),
+-            runtime.get("provider"),
+-            runtime.get("base_url"),
+-            runtime.get("api_mode"),
+-            runtime.get("command"),
+-            tuple(runtime.get("args") or ()),
+-        ),
+-    }
+diff --git a/cli-config.yaml.example b/cli-config.yaml.example
+index 6bb422ae..8e4ef342 100644
+--- a/cli-config.yaml.example
++++ b/cli-config.yaml.example
+@@ -114,20 +114,6 @@ model:
+ #   # Data policy: "allow" (default) or "deny" to exclude providers that may store data
+ #   # data_collection: "deny"
+ 
+-# =============================================================================
+-# Smart Model Routing (optional)
+-# =============================================================================
+-# Use a cheaper model for short/simple turns while keeping your main model for
+-# more complex requests. Disabled by default.
+-#
+-# smart_model_routing:
+-#   enabled: true
+-#   max_simple_chars: 160
+-#   max_simple_words: 28
+-#   cheap_model:
+-#     provider: openrouter
+-#     model: google/gemini-2.5-flash
+-
+ # =============================================================================
+ # Git Worktree Isolation
+ # =============================================================================
+diff --git a/cli.py b/cli.py
+index 0e5e9ff6..3b1ecd8a 100644
+--- a/cli.py
++++ b/cli.py
+@@ -310,12 +310,6 @@ def load_cli_config() -> Dict[str, Any]:
+             "enabled": True,      # Auto-compress when approaching context limit
+             "threshold": 0.50,    # Compress at 50% of model's context limit
+         },
+-        "smart_model_routing": {
+-            "enabled": False,
+-            "max_simple_chars": 160,
+-            "max_simple_words": 28,
+-            "cheap_model": {},
+-        },
+         "agent": {
+             "max_turns": 90,  # Default max tool-calling iterations (shared with subagents)
+             "verbose": False,
+@@ -1857,8 +1851,9 @@ class HermesCLI:
+             fb = [fb] if fb.get("provider") and fb.get("model") else []
+         self._fallback_model = fb
+ 
+-        # Optional cheap-vs-strong routing for simple turns
+-        self._smart_model_routing = CLI_CONFIG.get("smart_model_routing", {}) or {}
++        # Signature of the currently-initialised agent's runtime.  Used to
++        # rebuild the agent when provider / model / base_url changes across
++        # turns (e.g. after /model or credential rotation).
+         self._active_agent_route_signature = None
+ 
+         # Agent will be initialized on first use
+@@ -2883,24 +2878,36 @@ class HermesCLI:
+         return True
+ 
+     def _resolve_turn_agent_config(self, user_message: str) -> dict:
+-        """Resolve model/runtime overrides for a single user turn."""
+-        from agent.smart_model_routing import resolve_turn_route
++        """Build the effective model/runtime config for a single user turn.
++
++        Always uses the session's primary model/provider.  If the user has
++        toggled `/fast` on and the current model supports Priority
++        Processing / Anthropic fast mode, attach `request_overrides` so the
++        API call is marked accordingly.
++        """
+         from hermes_cli.models import resolve_fast_mode_overrides
+ 
+-        route = resolve_turn_route(
+-            user_message,
+-            self._smart_model_routing,
+-            {
+-                "model": self.model,
+-                "api_key": self.api_key,
+-                "base_url": self.base_url,
+-                "provider": self.provider,
+-                "api_mode": self.api_mode,
+-                "command": self.acp_command,
+-                "args": list(self.acp_args or []),
+-                "credential_pool": getattr(self, "_credential_pool", None),
+-            },
+-        )
++        runtime = {
++            "api_key": self.api_key,
++            "base_url": self.base_url,
++            "provider": self.provider,
++            "api_mode": self.api_mode,
++            "command": self.acp_command,
++            "args": list(self.acp_args or []),
++            "credential_pool": getattr(self, "_credential_pool", None),
++        }
++        route = {
++            "model": self.model,
++            "runtime": runtime,
++            "signature": (
++                self.model,
++                runtime["provider"],
++                runtime["base_url"],
++                runtime["api_mode"],
++                runtime["command"],
++                tuple(runtime["args"]),
++            ),
++        }
+ 
+         service_tier = getattr(self, "service_tier", None)
+         if not service_tier:
+@@ -2908,13 +2915,13 @@ class HermesCLI:
+             return route
+ 
+         try:
+-            overrides = resolve_fast_mode_overrides(route.get("model"))
++            overrides = resolve_fast_mode_overrides(route["model"])
+         except Exception:
+             overrides = None
+         route["request_overrides"] = overrides
+         return route
+ 
+-    def _init_agent(self, *, model_override: str = None, runtime_override: dict = None, route_label: str = None, request_overrides: dict | None = None) -> bool:
++    def _init_agent(self, *, model_override: str = None, runtime_override: dict = None, request_overrides: dict | None = None) -> bool:
+         """
+         Initialize the agent on first use.
+         When resuming a session, restores conversation history from SQLite.
+@@ -7911,7 +7918,6 @@ class HermesCLI:
+         if not self._init_agent(
+             model_override=turn_route["model"],
+             runtime_override=turn_route["runtime"],
+-            route_label=turn_route["label"],
+             request_overrides=turn_route.get("request_overrides"),
+         ):
+             return None
+@@ -10535,7 +10541,6 @@ def main(
+                 if cli._init_agent(
+                     model_override=turn_route["model"],
+                     runtime_override=turn_route["runtime"],
+-                    route_label=turn_route["label"],
+                     request_overrides=turn_route.get("request_overrides"),
+                 ):
+                     cli.agent.quiet_mode = True
+diff --git a/cron/scheduler.py b/cron/scheduler.py
+index 6e93fc02..ebeb29dd 100644
+--- a/cron/scheduler.py
++++ b/cron/scheduler.py
+@@ -826,7 +826,6 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
+ 
+         # Provider routing
+         pr = _cfg.get("provider_routing", {})
+-        smart_routing = _cfg.get("smart_model_routing", {}) or {}
+ 
+         from hermes_cli.runtime_provider import (
+             resolve_runtime_provider,
+@@ -843,24 +842,9 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
+             message = format_runtime_provider_error(exc)
+             raise RuntimeError(message) from exc
+ 
+-        from agent.smart_model_routing import resolve_turn_route
+-        turn_route = resolve_turn_route(
+-            prompt,
+-            smart_routing,
+-            {
+-                "model": model,
+-                "api_key": runtime.get("api_key"),
+-                "base_url": runtime.get("base_url"),
+-                "provider": runtime.get("provider"),
+-                "api_mode": runtime.get("api_mode"),
+-                "command": runtime.get("command"),
+-                "args": list(runtime.get("args") or []),
+-            },
+-        )
+-
+         fallback_model = _cfg.get("fallback_providers") or _cfg.get("fallback_model") or None
+         credential_pool = None
+-        runtime_provider = str(turn_route["runtime"].get("provider") or "").strip().lower()
++        runtime_provider = str(runtime.get("provider") or "").strip().lower()
+         if runtime_provider:
+             try:
+                 from agent.credential_pool import load_pool
+@@ -877,13 +861,13 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
+                 logger.debug("Job '%s': failed to load credential pool for %s: %s", job_id, runtime_provider, e)
+ 
+         agent = AIAgent(
+-            model=turn_route["model"],
+-            api_key=turn_route["runtime"].get("api_key"),
+-            base_url=turn_route["runtime"].get("base_url"),
+-            provider=turn_route["runtime"].get("provider"),
+-            api_mode=turn_route["runtime"].get("api_mode"),
+-            acp_command=turn_route["runtime"].get("command"),
+-            acp_args=turn_route["runtime"].get("args"),
++            model=model,
++            api_key=runtime.get("api_key"),
++            base_url=runtime.get("base_url"),
++            provider=runtime.get("provider"),
++            api_mode=runtime.get("api_mode"),
++            acp_command=runtime.get("command"),
++            acp_args=runtime.get("args"),
+             max_iterations=max_iterations,
+             reasoning_config=reasoning_config,
+             prefill_messages=prefill_messages,
+diff --git a/gateway/run.py b/gateway/run.py
+index 60c57495..3b3ee38f 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -629,7 +629,6 @@ class GatewayRunner:
+         self._restart_drain_timeout = self._load_restart_drain_timeout()
+         self._provider_routing = self._load_provider_routing()
+         self._fallback_model = self._load_fallback_model()
+-        self._smart_model_routing = self._load_smart_model_routing()
+ 
+         # Wire process registry into session store for reset protection
+         from tools.process_registry import process_registry
+@@ -1082,11 +1081,16 @@ class GatewayRunner:
+         return model, runtime_kwargs
+ 
+     def _resolve_turn_agent_config(self, user_message: str, model: str, runtime_kwargs: dict) -> dict:
+-        from agent.smart_model_routing import resolve_turn_route
++        """Build the effective model/runtime config for a single turn.
++
++        Always uses the session's primary model/provider.  If `/fast` is
++        enabled and the model supports Priority Processing / Anthropic fast
++        mode, attach `request_overrides` so the API call is marked
++        accordingly.
++        """
+         from hermes_cli.models import resolve_fast_mode_overrides
+ 
+-        primary = {
+-            "model": model,
++        runtime = {
+             "api_key": runtime_kwargs.get("api_key"),
+             "base_url": runtime_kwargs.get("base_url"),
+             "provider": runtime_kwargs.get("provider"),
+@@ -1095,7 +1099,18 @@ class GatewayRunner:
+             "args": list(runtime_kwargs.get("args") or []),
+             "credential_pool": runtime_kwargs.get("credential_pool"),
+         }
+-        route = resolve_turn_route(user_message, getattr(self, "_smart_model_routing", {}), primary)
++        route = {
++            "model": model,
++            "runtime": runtime,
++            "signature": (
++                model,
++                runtime["provider"],
++                runtime["base_url"],
++                runtime["api_mode"],
++                runtime["command"],
++                tuple(runtime["args"]),
++            ),
++        }
+ 
+         service_tier = getattr(self, "_service_tier", None)
+         if not service_tier:
+@@ -1103,7 +1118,7 @@ class GatewayRunner:
+             return route
+ 
+         try:
+-            overrides = resolve_fast_mode_overrides(route.get("model"))
++            overrides = resolve_fast_mode_overrides(route["model"])
+         except Exception:
+             overrides = None
+         route["request_overrides"] = overrides
+@@ -1461,20 +1476,6 @@ class GatewayRunner:
+             pass
+         return None
+ 
+-    @staticmethod
+-    def _load_smart_model_routing() -> dict:
+-        """Load optional smart cheap-vs-strong model routing config."""
+-        try:
+-            import yaml as _y
+-            cfg_path = _hermes_home / "config.yaml"
+-            if cfg_path.exists():
+-                with open(cfg_path, encoding="utf-8") as _f:
+-                    cfg = _y.safe_load(_f) or {}
+-                return cfg.get("smart_model_routing", {}) or {}
+-        except Exception:
+-            pass
+-        return {}
+-
+     def _snapshot_running_agents(self) -> Dict[str, Any]:
+         return {
+             session_key: agent
+diff --git a/hermes_cli/config.py b/hermes_cli/config.py
+index 9040eac0..147194b6 100644
+--- a/hermes_cli/config.py
++++ b/hermes_cli/config.py
+@@ -474,13 +474,6 @@ DEFAULT_CONFIG = {
+         },
+     },
+ 
+-    "smart_model_routing": {
+-        "enabled": False,
+-        "max_simple_chars": 160,
+-        "max_simple_words": 28,
+-        "cheap_model": {},
+-    },
+-    
+     # Auxiliary model config — provider:model for each side task.
+     # Format: provider is the provider name, model is the model slug.
+     # "auto" for provider = auto-detect best available provider.
+@@ -2878,19 +2871,6 @@ _FALLBACK_COMMENT = """
+ # fallback_model:
+ #   provider: openrouter
+ #   model: anthropic/claude-sonnet-4
+-#
+-# ── Smart Model Routing ────────────────────────────────────────────────
+-# Optional cheap-vs-strong routing for simple turns.
+-# Keeps the primary model for complex work, but can route short/simple
+-# messages to a cheaper model across providers.
+-#
+-# smart_model_routing:
+-#   enabled: true
+-#   max_simple_chars: 160
+-#   max_simple_words: 28
+-#   cheap_model:
+-#     provider: openrouter
+-#     model: google/gemini-2.5-flash
+ """
+ 
+ 
+@@ -2922,19 +2902,6 @@ _COMMENTED_SECTIONS = """
+ # fallback_model:
+ #   provider: openrouter
+ #   model: anthropic/claude-sonnet-4
+-#
+-# ── Smart Model Routing ────────────────────────────────────────────────
+-# Optional cheap-vs-strong routing for simple turns.
+-# Keeps the primary model for complex work, but can route short/simple
+-# messages to a cheaper model across providers.
+-#
+-# smart_model_routing:
+-#   enabled: true
+-#   max_simple_chars: 160
+-#   max_simple_words: 28
+-#   cheap_model:
+-#     provider: openrouter
+-#     model: google/gemini-2.5-flash
+ """
+ 
+ 
+diff --git a/hermes_cli/dump.py b/hermes_cli/dump.py
+index f3a174e7..90364a26 100644
+--- a/hermes_cli/dump.py
++++ b/hermes_cli/dump.py
+@@ -160,7 +160,6 @@ def _config_overrides(config: dict) -> dict[str, str]:
+         ("display", "streaming"),
+         ("display", "skin"),
+         ("display", "show_reasoning"),
+-        ("smart_model_routing", "enabled"),
+         ("privacy", "redact_pii"),
+         ("tts", "provider"),
+     ]
+diff --git a/hermes_cli/tips.py b/hermes_cli/tips.py
+index aa6cb972..77c2b240 100644
+--- a/hermes_cli/tips.py
++++ b/hermes_cli/tips.py
+@@ -323,7 +323,6 @@ TIPS = [
+     "GPT-5 and Codex use 'developer' role instead of 'system' in the message format.",
+     "Per-task auxiliary overrides: auxiliary.vision.provider, auxiliary.compression.model, etc. in config.yaml.",
+     "The auxiliary client treats 'main' as a provider alias — resolves to your actual primary provider + model.",
+-    "Smart routing can auto-route simple queries to a cheaper model — set smart_model_routing.enabled: true.",
+     "hermes claw migrate --dry-run previews OpenClaw migration without writing anything.",
+     "File paths pasted with quotes or escaped spaces are handled automatically — no manual cleanup needed.",
+     "Slash commands never trigger the large-paste collapse — /command with big arguments works correctly.",
+diff --git a/hermes_cli/web_server.py b/hermes_cli/web_server.py
+index 2c42bfd9..50f6ff67 100644
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -232,7 +232,6 @@ _CATEGORY_MERGE: Dict[str, str] = {
+     "checkpoints": "agent",
+     "approvals": "security",
+     "human_delay": "display",
+-    "smart_model_routing": "agent",
+     "dashboard": "display",
+     "code_execution": "agent",
+ }
+diff --git a/skills/autonomous-ai-agents/hermes-agent/SKILL.md b/skills/autonomous-ai-agents/hermes-agent/SKILL.md
+index 362841f3..d19471c8 100644
+--- a/skills/autonomous-ai-agents/hermes-agent/SKILL.md
++++ b/skills/autonomous-ai-agents/hermes-agent/SKILL.md
+@@ -338,7 +338,6 @@ Edit with `hermes config edit` or `hermes config set section.key value`.
+ | `memory` | `memory_enabled`, `user_profile_enabled`, `provider` |
+ | `security` | `tirith_enabled`, `website_blocklist` |
+ | `delegation` | `model`, `provider`, `base_url`, `api_key`, `max_iterations` (50), `reasoning_effort` |
+-| `smart_model_routing` | `enabled`, `cheap_model` |
+ | `checkpoints` | `enabled`, `max_snapshots` (50) |
+ 
+ Full config reference: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+diff --git a/tests/agent/test_credential_pool_routing.py b/tests/agent/test_credential_pool_routing.py
+index 38f5c6df..8477fdb6 100644
+--- a/tests/agent/test_credential_pool_routing.py
++++ b/tests/agent/test_credential_pool_routing.py
+@@ -1,129 +1,25 @@
+-"""Tests for credential pool preservation through smart routing and 429 recovery.
++"""Tests for credential pool preservation through turn config and 429 recovery.
+ 
+ Covers:
+-1. credential_pool flows through resolve_turn_route (no-route and fallback paths)
+-2. CLI _resolve_turn_agent_config passes credential_pool to primary dict
+-3. Gateway _resolve_turn_agent_config passes credential_pool to primary dict
+-4. Eager fallback deferred when credential pool has credentials
+-5. Eager fallback fires when no credential pool exists
+-6. Full 429 rotation cycle: retry-same → rotate → exhaust → fallback
++1. CLI _resolve_turn_agent_config passes credential_pool to runtime dict
++2. Gateway _resolve_turn_agent_config passes credential_pool to runtime dict
++3. Eager fallback deferred when credential pool has credentials
++4. Eager fallback fires when no credential pool exists
++5. Full 429 rotation cycle: retry-same → rotate → exhaust → fallback
+ """
+ 
+-import os
+-import time
+ from types import SimpleNamespace
+-from unittest.mock import MagicMock, patch, PropertyMock
+-
+-import pytest
+-
+-
+-# ---------------------------------------------------------------------------
+-# 1. smart_model_routing: credential_pool preserved in no-route path
+-# ---------------------------------------------------------------------------
+-
+-class TestSmartRoutingPoolPreservation:
+-    def test_no_route_preserves_credential_pool(self):
+-        from agent.smart_model_routing import resolve_turn_route
+-
+-        fake_pool = MagicMock(name="CredentialPool")
+-        primary = {
+-            "model": "gpt-5.4",
+-            "api_key": "sk-test",
+-            "base_url": None,
+-            "provider": "openai-codex",
+-            "api_mode": "codex_responses",
+-            "command": None,
+-            "args": [],
+-            "credential_pool": fake_pool,
+-        }
+-        # routing disabled
+-        result = resolve_turn_route("hello", None, primary)
+-        assert result["runtime"]["credential_pool"] is fake_pool
+-
+-    def test_no_route_none_pool(self):
+-        from agent.smart_model_routing import resolve_turn_route
+-
+-        primary = {
+-            "model": "gpt-5.4",
+-            "api_key": "sk-test",
+-            "base_url": None,
+-            "provider": "openai-codex",
+-            "api_mode": "codex_responses",
+-            "command": None,
+-            "args": [],
+-        }
+-        result = resolve_turn_route("hello", None, primary)
+-        assert result["runtime"]["credential_pool"] is None
+-
+-    def test_routing_disabled_preserves_pool(self):
+-        from agent.smart_model_routing import resolve_turn_route
+-
+-        fake_pool = MagicMock(name="CredentialPool")
+-        primary = {
+-            "model": "gpt-5.4",
+-            "api_key": "sk-test",
+-            "base_url": None,
+-            "provider": "openai-codex",
+-            "api_mode": "codex_responses",
+-            "command": None,
+-            "args": [],
+-            "credential_pool": fake_pool,
+-        }
+-        # routing explicitly disabled
+-        result = resolve_turn_route("hello", {"enabled": False}, primary)
+-        assert result["runtime"]["credential_pool"] is fake_pool
+-
+-    def test_route_fallback_on_resolve_error_preserves_pool(self, monkeypatch):
+-        """When smart routing picks a cheap model but resolve_runtime_provider
+-        fails, the fallback to primary must still include credential_pool."""
+-        from agent.smart_model_routing import resolve_turn_route
+-
+-        fake_pool = MagicMock(name="CredentialPool")
+-        primary = {
+-            "model": "gpt-5.4",
+-            "api_key": "sk-test",
+-            "base_url": None,
+-            "provider": "openai-codex",
+-            "api_mode": "codex_responses",
+-            "command": None,
+-            "args": [],
+-            "credential_pool": fake_pool,
+-        }
+-        routing_config = {
+-            "enabled": True,
+-            "cheap_model": "openai/gpt-4.1-mini",
+-            "cheap_provider": "openrouter",
+-            "max_tokens": 200,
+-            "patterns": ["^(hi|hello|hey)"],
+-        }
+-        # Force resolve_runtime_provider to fail so it falls back to primary
+-        monkeypatch.setattr(
+-            "hermes_cli.runtime_provider.resolve_runtime_provider",
+-            MagicMock(side_effect=RuntimeError("no credentials")),
+-        )
+-        result = resolve_turn_route("hi", routing_config, primary)
+-        assert result["runtime"]["credential_pool"] is fake_pool
++from unittest.mock import MagicMock, patch
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# 2 & 3. CLI and Gateway _resolve_turn_agent_config include credential_pool
++# 1. CLI _resolve_turn_agent_config includes credential_pool
+ # ---------------------------------------------------------------------------
+ 
+ class TestCliTurnRoutePool:
+-    def test_resolve_turn_includes_pool(self, monkeypatch, tmp_path):
+-        """CLI's _resolve_turn_agent_config must pass credential_pool to primary."""
+-        from agent.smart_model_routing import resolve_turn_route
+-        captured = {}
+-
+-        def spy_resolve(user_message, routing_config, primary):
+-            captured["primary"] = primary
+-            return resolve_turn_route(user_message, routing_config, primary)
+-
+-        monkeypatch.setattr(
+-            "agent.smart_model_routing.resolve_turn_route", spy_resolve
+-        )
+-
+-        # Build a minimal HermesCLI-like object with the method
++    def test_resolve_turn_includes_pool(self):
++        """CLI's _resolve_turn_agent_config must pass credential_pool in runtime."""
++        fake_pool = MagicMock(name="FakePool")
+         shell = SimpleNamespace(
+             model="gpt-5.4",
+             api_key="sk-test",
+@@ -132,58 +28,46 @@ class TestCliTurnRoutePool:
+             api_mode="codex_responses",
+             acp_command=None,
+             acp_args=[],
+-            _credential_pool=MagicMock(name="FakePool"),
+-            _smart_model_routing={"enabled": False},
++            _credential_pool=fake_pool,
++            service_tier=None,
+         )
+ 
+-        # Import and bind the real method
+         from cli import HermesCLI
+         bound = HermesCLI._resolve_turn_agent_config.__get__(shell)
+-        bound("test message")
++        route = bound("test message")
+ 
+-        assert "credential_pool" in captured["primary"]
+-        assert captured["primary"]["credential_pool"] is shell._credential_pool
++        assert route["runtime"]["credential_pool"] is fake_pool
+ 
+ 
++# ---------------------------------------------------------------------------
++# 2. Gateway _resolve_turn_agent_config includes credential_pool
++# ---------------------------------------------------------------------------
++
+ class TestGatewayTurnRoutePool:
+-    def test_resolve_turn_includes_pool(self, monkeypatch):
++    def test_resolve_turn_includes_pool(self):
+         """Gateway's _resolve_turn_agent_config must pass credential_pool."""
+-        from agent.smart_model_routing import resolve_turn_route
+-        captured = {}
+-
+-        def spy_resolve(user_message, routing_config, primary):
+-            captured["primary"] = primary
+-            return resolve_turn_route(user_message, routing_config, primary)
+-
+-        monkeypatch.setattr(
+-            "agent.smart_model_routing.resolve_turn_route", spy_resolve
+-        )
+-
+         from gateway.run import GatewayRunner
+ 
+-        runner = SimpleNamespace(
+-            _smart_model_routing={"enabled": False},
+-        )
+-
++        fake_pool = MagicMock(name="FakePool")
++        runner = SimpleNamespace(_service_tier=None)
+         runtime_kwargs = {
+-            "api_key": "sk-test",
++            "api_key": "***",
+             "base_url": None,
+             "provider": "openai-codex",
+             "api_mode": "codex_responses",
+             "command": None,
+             "args": [],
+-            "credential_pool": MagicMock(name="FakePool"),
++            "credential_pool": fake_pool,
+         }
+ 
+         bound = GatewayRunner._resolve_turn_agent_config.__get__(runner)
+-        bound("test message", "gpt-5.4", runtime_kwargs)
++        route = bound("test message", "gpt-5.4", runtime_kwargs)
+ 
+-        assert "credential_pool" in captured["primary"]
+-        assert captured["primary"]["credential_pool"] is runtime_kwargs["credential_pool"]
++        assert route["runtime"]["credential_pool"] is fake_pool
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# 4 & 5. Eager fallback deferred/fires based on credential pool
++# 3 & 4. Eager fallback deferred/fires based on credential pool
+ # ---------------------------------------------------------------------------
+ 
+ class TestEagerFallbackWithPool:
+@@ -251,7 +135,7 @@ class TestEagerFallbackWithPool:
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# 6. Full 429 rotation cycle via _recover_with_credential_pool
++# 5. Full 429 rotation cycle via _recover_with_credential_pool
+ # ---------------------------------------------------------------------------
+ 
+ class TestPoolRotationCycle:
+diff --git a/tests/agent/test_smart_model_routing.py b/tests/agent/test_smart_model_routing.py
+deleted file mode 100644
+index 7e902560..00000000
+--- a/tests/agent/test_smart_model_routing.py
++++ /dev/null
+@@ -1,61 +0,0 @@
+-from agent.smart_model_routing import choose_cheap_model_route
+-
+-
+-_BASE_CONFIG = {
+-    "enabled": True,
+-    "cheap_model": {
+-        "provider": "openrouter",
+-        "model": "google/gemini-2.5-flash",
+-    },
+-}
+-
+-
+-def test_returns_none_when_disabled():
+-    cfg = {**_BASE_CONFIG, "enabled": False}
+-    assert choose_cheap_model_route("what time is it in tokyo?", cfg) is None
+-
+-
+-def test_routes_short_simple_prompt():
+-    result = choose_cheap_model_route("what time is it in tokyo?", _BASE_CONFIG)
+-    assert result is not None
+-    assert result["provider"] == "openrouter"
+-    assert result["model"] == "google/gemini-2.5-flash"
+-    assert result["routing_reason"] == "simple_turn"
+-
+-
+-def test_skips_long_prompt():
+-    prompt = "please summarize this carefully " * 20
+-    assert choose_cheap_model_route(prompt, _BASE_CONFIG) is None
+-
+-
+-def test_skips_code_like_prompt():
+-    prompt = "debug this traceback: ```python\nraise ValueError('bad')\n```"
+-    assert choose_cheap_model_route(prompt, _BASE_CONFIG) is None
+-
+-
+-def test_skips_tool_heavy_prompt_keywords():
+-    prompt = "implement a patch for this docker error"
+-    assert choose_cheap_model_route(prompt, _BASE_CONFIG) is None
+-
+-
+-def test_resolve_turn_route_falls_back_to_primary_when_route_runtime_cannot_be_resolved(monkeypatch):
+-    from agent.smart_model_routing import resolve_turn_route
+-
+-    monkeypatch.setattr(
+-        "hermes_cli.runtime_provider.resolve_runtime_provider",
+-        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("bad route")),
+-    )
+-    result = resolve_turn_route(
+-        "what time is it in tokyo?",
+-        _BASE_CONFIG,
+-        {
+-            "model": "anthropic/claude-sonnet-4",
+-            "provider": "openrouter",
+-            "base_url": "https://openrouter.ai/api/v1",
+-            "api_mode": "chat_completions",
+-            "api_key": "sk-primary",
+-        },
+-    )
+-    assert result["model"] == "anthropic/claude-sonnet-4"
+-    assert result["runtime"]["provider"] == "openrouter"
+-    assert result["label"] is None
+diff --git a/tests/cli/test_cli_provider_resolution.py b/tests/cli/test_cli_provider_resolution.py
+index fe4153c8..0c9aab82 100644
+--- a/tests/cli/test_cli_provider_resolution.py
++++ b/tests/cli/test_cli_provider_resolution.py
+@@ -207,48 +207,11 @@ def test_cli_turn_routing_uses_primary_when_disabled(monkeypatch):
+     shell.api_mode = "chat_completions"
+     shell.base_url = "https://openrouter.ai/api/v1"
+     shell.api_key = "sk-primary"
+-    shell._smart_model_routing = {"enabled": False}
+ 
+     result = shell._resolve_turn_agent_config("what time is it in tokyo?")
+ 
+     assert result["model"] == "gpt-5"
+     assert result["runtime"]["provider"] == "openrouter"
+-    assert result["label"] is None
+-
+-
+-def test_cli_turn_routing_uses_cheap_model_when_simple(monkeypatch):
+-    cli = _import_cli()
+-
+-    def _runtime_resolve(**kwargs):
+-        assert kwargs["requested"] == "zai"
+-        return {
+-            "provider": "zai",
+-            "api_mode": "chat_completions",
+-            "base_url": "https://open.z.ai/api/v1",
+-            "api_key": "cheap-key",
+-            "source": "env/config",
+-        }
+-
+-    monkeypatch.setattr("hermes_cli.runtime_provider.resolve_runtime_provider", _runtime_resolve)
+-
+-    shell = cli.HermesCLI(model="anthropic/claude-sonnet-4", compact=True, max_turns=1)
+-    shell.provider = "openrouter"
+-    shell.api_mode = "chat_completions"
+-    shell.base_url = "https://openrouter.ai/api/v1"
+-    shell.api_key = "primary-key"
+-    shell._smart_model_routing = {
+-        "enabled": True,
+-        "cheap_model": {"provider": "zai", "model": "glm-5-air"},
+-        "max_simple_chars": 160,
+-        "max_simple_words": 28,
+-    }
+-
+-    result = shell._resolve_turn_agent_config("what time is it in tokyo?")
+-
+-    assert result["model"] == "glm-5-air"
+-    assert result["runtime"]["provider"] == "zai"
+-    assert result["runtime"]["api_key"] == "cheap-key"
+-    assert result["label"] is not None
+ 
+ 
+ def test_cli_prefers_config_provider_over_stale_env_override(monkeypatch):
+diff --git a/tests/cli/test_fast_command.py b/tests/cli/test_fast_command.py
+index bc6c8e5f..23a1a4aa 100644
+--- a/tests/cli/test_fast_command.py
++++ b/tests/cli/test_fast_command.py
+@@ -183,27 +183,10 @@ class TestFastModeRouting(unittest.TestCase):
+             acp_command=None,
+             acp_args=[],
+             _credential_pool=None,
+-            _smart_model_routing={},
+             service_tier="priority",
+         )
+ 
+-        original_runtime = {
+-            "api_key": "***",
+-            "base_url": "https://openrouter.ai/api/v1",
+-            "provider": "openrouter",
+-            "api_mode": "chat_completions",
+-            "command": None,
+-            "args": [],
+-            "credential_pool": None,
+-        }
+-
+-        with patch("agent.smart_model_routing.resolve_turn_route", return_value={
+-            "model": "gpt-5.4",
+-            "runtime": dict(original_runtime),
+-            "label": None,
+-            "signature": ("gpt-5.4", "openrouter", "https://openrouter.ai/api/v1", "chat_completions", None, ()),
+-        }):
+-            route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
++        route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
+ 
+         # Provider should NOT have changed
+         assert route["runtime"]["provider"] == "openrouter"
+@@ -222,26 +205,10 @@ class TestFastModeRouting(unittest.TestCase):
+             acp_command=None,
+             acp_args=[],
+             _credential_pool=None,
+-            _smart_model_routing={},
+             service_tier="priority",
+         )
+ 
+-        primary_route = {
+-            "model": "gpt-5.3-codex",
+-            "runtime": {
+-                "api_key": "***",
+-                "base_url": "https://openrouter.ai/api/v1",
+-                "provider": "openrouter",
+-                "api_mode": "chat_completions",
+-                "command": None,
+-                "args": [],
+-                "credential_pool": None,
+-            },
+-            "label": None,
+-            "signature": ("gpt-5.3-codex", "openrouter", "https://openrouter.ai/api/v1", "chat_completions", None, ()),
+-        }
+-        with patch("agent.smart_model_routing.resolve_turn_route", return_value=primary_route):
+-            route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
++        route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
+ 
+         assert route["runtime"]["provider"] == "openrouter"
+         assert route.get("request_overrides") is None
+@@ -329,27 +296,10 @@ class TestAnthropicFastMode(unittest.TestCase):
+             acp_command=None,
+             acp_args=[],
+             _credential_pool=None,
+-            _smart_model_routing={},
+             service_tier="priority",
+         )
+ 
+-        original_runtime = {
+-            "api_key": "***",
+-            "base_url": "https://api.anthropic.com",
+-            "provider": "anthropic",
+-            "api_mode": "anthropic_messages",
+-            "command": None,
+-            "args": [],
+-            "credential_pool": None,
+-        }
+-
+-        with patch("agent.smart_model_routing.resolve_turn_route", return_value={
+-            "model": "claude-opus-4-6",
+-            "runtime": dict(original_runtime),
+-            "label": None,
+-            "signature": ("claude-opus-4-6", "anthropic", "https://api.anthropic.com", "anthropic_messages", None, ()),
+-        }):
+-            route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
++        route = cli_mod.HermesCLI._resolve_turn_agent_config(stub, "hi")
+ 
+         assert route["runtime"]["provider"] == "anthropic"
+         assert route["request_overrides"] == {"speed": "fast"}
+diff --git a/tests/cron/test_codex_execution_paths.py b/tests/cron/test_codex_execution_paths.py
+index 354c95dd..65526f4a 100644
+--- a/tests/cron/test_codex_execution_paths.py
++++ b/tests/cron/test_codex_execution_paths.py
+@@ -152,7 +152,6 @@ def test_gateway_run_agent_codex_path_handles_internal_401_refresh(monkeypatch):
+     runner._provider_routing = {}
+     runner._fallback_model = None
+     runner._running_agents = {}
+-    runner._smart_model_routing = {}
+     from unittest.mock import MagicMock, AsyncMock
+     runner.hooks = MagicMock()
+     runner.hooks.emit = AsyncMock()
+diff --git a/tests/gateway/test_discord_channel_prompts.py b/tests/gateway/test_discord_channel_prompts.py
+index 9c475bde..e1efd734 100644
+--- a/tests/gateway/test_discord_channel_prompts.py
++++ b/tests/gateway/test_discord_channel_prompts.py
+@@ -75,7 +75,6 @@ def _make_runner():
+     runner._service_tier = None
+     runner._provider_routing = {}
+     runner._fallback_model = None
+-    runner._smart_model_routing = {}
+     runner._running_agents = {}
+     runner._pending_model_notes = {}
+     runner._session_db = None
+diff --git a/tests/gateway/test_fast_command.py b/tests/gateway/test_fast_command.py
+index dc869ea1..82cc4fc6 100644
+--- a/tests/gateway/test_fast_command.py
++++ b/tests/gateway/test_fast_command.py
+@@ -4,7 +4,7 @@ import sys
+ import threading
+ import types
+ from types import SimpleNamespace
+-from unittest.mock import AsyncMock, patch
++from unittest.mock import AsyncMock
+ 
+ import pytest
+ import yaml
+@@ -53,7 +53,6 @@ def _make_runner():
+     runner._service_tier = None
+     runner._provider_routing = {}
+     runner._fallback_model = None
+-    runner._smart_model_routing = {}
+     runner._running_agents = {}
+     runner._pending_model_notes = {}
+     runner._session_db = None
+@@ -97,13 +96,7 @@ def test_turn_route_injects_priority_processing_without_changing_runtime():
+         "credential_pool": None,
+     }
+ 
+-    with patch("agent.smart_model_routing.resolve_turn_route", return_value={
+-        "model": "gpt-5.4",
+-        "runtime": dict(runtime_kwargs),
+-        "label": None,
+-        "signature": ("gpt-5.4", "openrouter", "https://openrouter.ai/api/v1", "chat_completions", None, ()),
+-    }):
+-        route = gateway_run.GatewayRunner._resolve_turn_agent_config(runner, "hi", "gpt-5.4", runtime_kwargs)
++    route = gateway_run.GatewayRunner._resolve_turn_agent_config(runner, "hi", "gpt-5.4", runtime_kwargs)
+ 
+     assert route["runtime"]["provider"] == "openrouter"
+     assert route["runtime"]["api_mode"] == "chat_completions"
+@@ -123,13 +116,7 @@ def test_turn_route_skips_priority_processing_for_unsupported_models():
+         "credential_pool": None,
+     }
+ 
+-    with patch("agent.smart_model_routing.resolve_turn_route", return_value={
+-        "model": "gpt-5.3-codex",
+-        "runtime": dict(runtime_kwargs),
+-        "label": None,
+-        "signature": ("gpt-5.3-codex", "openrouter", "https://openrouter.ai/api/v1", "chat_completions", None, ()),
+-    }):
+-        route = gateway_run.GatewayRunner._resolve_turn_agent_config(runner, "hi", "gpt-5.3-codex", runtime_kwargs)
++    route = gateway_run.GatewayRunner._resolve_turn_agent_config(runner, "hi", "gpt-5.3-codex", runtime_kwargs)
+ 
+     assert route["request_overrides"] is None
+ 
+diff --git a/website/docs/integrations/providers.md b/website/docs/integrations/providers.md
+index 9d32fc21..013c6a3e 100644
+--- a/website/docs/integrations/providers.md
++++ b/website/docs/integrations/providers.md
+@@ -1165,39 +1165,6 @@ Supported providers: `openrouter`, `nous`, `openai-codex`, `copilot`, `copilot-a
+ Fallback is configured exclusively through `config.yaml` — there are no environment variables for it. For full details on when it triggers, supported providers, and how it interacts with auxiliary tasks and delegation, see [Fallback Providers](/docs/user-guide/features/fallback-providers).
+ :::
+ 
+-## Smart Model Routing
+-
+-Optional cheap-vs-strong routing lets Hermes keep your main model for complex work while sending very short/simple turns to a cheaper model.
+-
+-```yaml
+-smart_model_routing:
+-  enabled: true
+-  max_simple_chars: 160
+-  max_simple_words: 28
+-  cheap_model:
+-    provider: openrouter
+-    model: google/gemini-2.5-flash
+-    # base_url: http://localhost:8000/v1  # optional custom endpoint
+-    # key_env: MY_CUSTOM_KEY              # optional env var name for that endpoint's API key
+-```
+-
+-How it works:
+-- If a turn is short, single-line, and does not look code/tool/debug heavy, Hermes may route it to `cheap_model`
+-- If the turn looks complex, Hermes stays on your primary model/provider
+-- If the cheap route cannot be resolved cleanly, Hermes falls back to the primary model automatically
+-
+-This is intentionally conservative. It is meant for quick, low-stakes turns like:
+-- short factual questions
+-- quick rewrites
+-- lightweight summaries
+-
+-It will avoid routing prompts that look like:
+-- coding/debugging work
+-- tool-heavy requests
+-- long or multi-line analysis asks
+-
+-Use this when you want lower latency or cost without fully changing your default model.
+-
+ ---
+ 
+ ## See Also

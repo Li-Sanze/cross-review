@@ -1,0 +1,238 @@
+diff --git a/README.md b/README.md
+index cfa267d..793468c 100644
+--- a/README.md
++++ b/README.md
+@@ -376,7 +376,7 @@ helloagents --standby
+ 
+ ## ⚙️ How It Works
+ 
+-**Short version:** HelloAGENTS selects execution depth based on task type, risk, and project state. Simple tasks run directly; complex tasks use a routed kernel workflow with explicit ideation, planning, build, and verification lanes. Once the requirement and execution direction are clear, it prefers direct completion over repeated confirmation.
++**Short version:** HelloAGENTS selects execution depth based on task type, risk, and project state. In standby mode, unactivated projects keep a lightweight rule set: safety, completion constraints, a compact quality floor, and explicit `~command` lanes. Once the project is activated through `.helloagents/`, or when global mode is enabled, HelloAGENTS switches to the full routed kernel workflow with explicit ideation, planning, build, verification, and consolidation stages.
+ 
+ **The routed 6-stage kernel:**
+ 
+@@ -410,11 +410,13 @@ HelloAGENTS supports two installation modes with different installation methods:
+ 
+ | Mode | Install Method | Rules | Skills | Best For |
+ |------|---------------|-------|--------|----------|
+-| **Standby** (default) | `helloagents install <target> --standby` or `helloagents install --all --standby` | `bootstrap-lite.md` (lite rules) | `~command` on demand, project activation via `.helloagents/` (`~wiki` or `~init`) | Selective use, keeping other projects unaffected |
++| **Standby** (default) | `helloagents install <target> --standby` or `helloagents install --all --standby` | `bootstrap-lite.md` (lite rules with compact quality floor, safety, and completion constraints) | `~command` on demand, project activation via `.helloagents/` (`~wiki` or `~init`) | Selective use, keeping other projects unaffected |
+ | **Global** | Manual plugins for Claude/Gemini; native local-plugin auto-install for Codex | `bootstrap.md` (full rules) | 14 skills auto-activate | All-in on HelloAGENTS across every project |
+ 
+ Standby mode injects rules into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, and `~/.codex/AGENTS.md`; Codex then loads that local merged file via `developer_instructions` in `~/.codex/config.toml`. Each CLI also gets a `helloagents` package-root symlink. Claude Code and Gemini still use hooks where their host surfaces support quiet injection well. Codex deliberately does **not** enable HelloAGENTS hooks by default: the latest pre-source shows hook lifecycle output in TUI and does not honor `suppressOutput` as a true silent injection path, so Codex relies on the injected rules file plus the local symlink/native plugin layout instead. In global mode, Claude Code uses plugin hooks from `.claude-plugin/plugin.json`, Gemini loads `bootstrap.md` via `contextFileName` plus extension hooks, and Codex uses the native local-plugin chain (marketplace + local plugin root + cache + plugin enablement in `config.toml`) without plugin hooks.
+ 
++In standby mode, `.helloagents/` is the activation boundary. Before activation, the lite carrier does **not** run the full 6-stage kernel or semantic auto-routing; it keeps the lightweight execution rules, explicit `~command` entry points, and minimum quality/completion guardrails. Once `.helloagents/` exists, the active project switches to the full project workflow and `bootstrap.md` becomes the runtime source of truth.
++
+ Bulk switch via CLI: `helloagents --global` or `helloagents --standby`
+ 
+ Re-running the same mode command is also valid. It refreshes the current mode's injected/copied files after branch switches, local development changes, or manual cleanup.
+@@ -669,6 +671,7 @@ Subagents may skip workflow packaging such as routing, interaction flow, and out
+ - ✨ Added `~wiki` for creating or syncing `.helloagents/` without writing project-local carrier files
+ - 🔧 Clarified the activation boundary: in standby mode, `.helloagents/` is the actual project activation signal; project-local carrier files remain optional and belong to `~init`
+ - 🔧 Refined `kb_create_mode` wording across bootstrap, help text, and README so it only describes sync timing inside activated projects or global mode
++- 🔧 Rebalanced `bootstrap.md` and `bootstrap-lite.md`: the full kernel stays in `bootstrap.md`, while standby keeps compact completion constraints, command routing, and a compressed quality floor for unactivated projects
+ - 🧪 Added routing coverage for `~wiki` and kept standby `.helloagents/` activation behavior under test
+ 
+ ### v3.0.2
+diff --git a/README_CN.md b/README_CN.md
+index 471737e..10ffd49 100644
+--- a/README_CN.md
++++ b/README_CN.md
+@@ -376,7 +376,7 @@ helloagents --standby
+ 
+ ## ⚙️ 工作原理
+ 
+-**简单说：** HelloAGENTS 根据任务类型、风险等级和项目状态选择执行深度。简单任务直接执行；复杂任务走“路由前置”的内核工作流，并通过显式命令通道拆分脑暴、规划、实现与验证。
++**简单说：** HelloAGENTS 根据任务类型、风险等级和项目状态选择执行深度。标准模式下，未激活项目只保留轻量规则：安全、完成约束、压缩版质量下限，以及显式 `~command` 通道；一旦项目通过 `.helloagents/` 激活，或启用全局模式，就切换到完整内核工作流，显式经过脑暴、规划、实现、验证与收尾阶段。
+ 
+ **六阶段内核：**
+ 
+@@ -410,11 +410,13 @@ HelloAGENTS 支持两种安装模式，采用不同的安装方式：
+ 
+ | 模式 | 安装方式 | 规则 | 技能 | 适用场景 |
+ |------|---------|------|------|----------|
+-| **标准模式** (默认) | `helloagents install <target> --standby` 或 `helloagents install --all --standby` | `bootstrap-lite.md`（精简规则） | `~command` 按需使用，通过 `.helloagents/` 激活项目（`~wiki` 或 `~init`） | 按需使用，不影响其他项目 |
++| **标准模式** (默认) | `helloagents install <target> --standby` 或 `helloagents install --all --standby` | `bootstrap-lite.md`（含压缩版质量下限、安全规则与完成约束的精简规则） | `~command` 按需使用，通过 `.helloagents/` 激活项目（`~wiki` 或 `~init`） | 按需使用，不影响其他项目 |
+ | **全局模式** | Claude/Gemini 手动装插件；Codex 自动装原生本地插件 | `bootstrap.md`（完整规则） | 14 个技能自动激活 | 全面使用 HelloAGENTS |
+ 
+ 标准模式会把规则注入到 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`；其中 Codex 再通过 `~/.codex/config.toml` 中的 `developer_instructions` 加载这个本地合并后的文件。每个 CLI 还会创建 `helloagents` 包根目录符号链接。Claude Code 和 Gemini 仍使用 hooks，因为宿主可以较安静地承载这类注入；Codex 默认**不启用** HelloAGENTS hooks：最新 pre 源码里 hook 生命周期会在 TUI 中可见显示，且 `suppressOutput` 不能作为真正的静默注入通道，所以 Codex 改为依赖注入后的规则文件，以及本地符号链接 / 原生本地插件目录结构。全局模式下，Claude Code 通过 `.claude-plugin/plugin.json` 中声明的 hooks 工作，Gemini 通过 `contextFileName=bootstrap.md` 和扩展 hooks 工作；Codex 仍使用原生本地插件安装链路（marketplace + 本地插件目录 + cache + `config.toml` 插件启用段），但不启用插件 hooks。
+ 
++在标准模式下，`.helloagents/` 就是项目激活边界。激活前，lite 载体**不会**运行完整六阶段内核，也不会启用语义自动选路；它只保留轻量执行规则、显式 `~command` 入口，以及最低质量/完成门槛。项目一旦存在 `.helloagents/`，当前项目就切换到完整项目流程，并以 `bootstrap.md` 作为运行时事实源。
++
+ 整套切换可用：`helloagents --global` 或 `helloagents --standby`
+ 
+ 重复执行当前模式命令也是合法的。它会在本地切分支、开发调试或手工清理后刷新当前模式下的注入/复制文件。
+@@ -669,6 +671,7 @@ npm test
+ - ✨ 新增 `~wiki`，用于只创建或同步 `.helloagents/`，不写项目级载体文件
+ - 🔧 明确标准模式下的激活边界：`.helloagents/` 才是项目进入完整流程的实际信号；项目级载体文件仍属于 `~init` 的职责
+ - 🔧 统一修正 bootstrap、帮助文本和 README 中 `kb_create_mode` 的表述，使其只描述已激活项目或全局模式下的同步时机
++- 🔧 重新收敛 `bootstrap.md` 与 `bootstrap-lite.md`：完整内核保留在 `bootstrap.md`，标准待机未激活项目保留压缩版完成约束、命令路由与质量下限
+ - 🧪 新增 `~wiki` 路由覆盖，并持续验证标准模式下基于 `.helloagents/` 的激活行为
+ 
+ ### v3.0.2
+diff --git a/bootstrap-lite.md b/bootstrap-lite.md
+index e87e2eb..5a29170 100644
+--- a/bootstrap-lite.md
++++ b/bootstrap-lite.md
+@@ -1,7 +1,7 @@
+ # HelloAGENTS (Standby)
+ 
+-适用条件：子代理执行特定任务时，仅跳过本文件中的路由、用户交互流程和输出格式，直接执行任务并返回结果。
+-排除条件：除上述豁免外，其余规则持续生效。
++适用条件：子代理执行特定任务时，仅跳过本文件中的路由、用户交互流程、输出格式和完成约束，直接执行任务并返回结果。
++排除条件：除上述豁免外，其余规则持续生效；不使用 `~command`，不包装输出格式。
+ 
+ ## 配置
+ 配置文件: ~/.helloagents/helloagents.json
+@@ -37,6 +37,12 @@
+ 3. 性能内建：从架构层面考虑性能（渲染策略、代码分割、资源优化），不事后补救
+ 4. 组件化设计：使用无样式/headless 组件库保留设计自由度，避免强样式框架限制美学表达
+ 
++### 质量下限（全阶段生效，按项目类型适用）
++1. 现代基线：使用目标平台当前稳定、主流、可维护的框架、API 和工程模式，不回退到过时技术
++2. 性能基线：渲染策略、资源优化、代码拆分与加载体验前置考虑，不把性能问题留到收尾补救
++3. 设计基线（涉及 UI 时）：建立一致的 design token、组件约束与状态覆盖，不输出模板化、陈旧或明显降级的界面
++4. 决策基线：不确定时主动查阅最新官方文档和可靠实践；项目已有明确技术栈、设计系统或方案包时，遵循既有决策
++
+ ## 安全 (EHRB)
+ 
+ ### Shell 命令安全（执行 shell 命令时强制遵守）
+@@ -122,15 +128,21 @@ output_format 为 false 时，所有回复保持自然输出，不适用以下
+ - 完成总结：按维度分行列出关键产出和验证结果
+ 排除条件：普通说明（身份说明、能力介绍、方案解释、背景信息等）禁止使用 `[√]` `[-]` `[ ]`，改用普通段落或普通列表。
+ 
+-## Delivery Tier
+-- `T0` — 只读探索、点子比较、方向发散 → 自然响应或 `~idea`
++## 交付分层（Delivery Tier）
++- `T0` — 只读分析、创意探索、方案比较 → 自然响应或 `~idea`
+ - `T1` — 低风险小改动、明确实现、显式验证 → 直接执行或 `~build` / `~verify`
+-- `T2` — 多文件功能、新项目、需要结构化 artifact → `~plan` 或 `~auto`
++- `T2` — 多文件功能、新项目、需要结构化产物 → `~plan` 或 `~auto`
+ - `T3` — 高风险或不可逆链路（权限、安全、支付、数据库、生产发布等）→ 先 `~plan` / `~prd`，再 `~build` / `~verify`
+ 
++## 完成约束
++- 未激活项目且未进入方案包 / `contract.json` / 证据链路时，声称完成前必须完成与任务类型匹配的必要检查；无法执行的检查必须明确说明，不得直接宣称完成
++- 当前项目已激活，或已存在方案包 / `contract.json` / 证据文件时，以完整流程、对应 skill 与运行时交付约束为准，不得降级为本节
++- 只读分析、创意探索、方案比较、中间进度和阻塞汇报不适用本节
++
+ ## ~command 路由
+ 用户输入 `~xxx` 时，立即读取对应的 SKILL.md 并按其流程执行，不要自行探索或猜测。
+ 优先使用当前会话已注入的“当前 HelloAGENTS 读取根目录”或已解析出的具体命令技能文件路径；若当前项目已存在由 `~init` 生成的 AGENTS.md / CLAUDE.md / .gemini/GEMINI.md，这些载体已由宿主自动加载，无需再次读取；仅在需要执行具体命令时读取对应 SKILL.md，不要扫描整个 `skills/helloagents/` 目录，也不要为同一个命令 skill 重复探测多个路径。
++`~do` 是 `~build` 的兼容别名；`~design` 是 `~plan` 的兼容别名；`~review` 是 `~verify` 的兼容别名。
+ 
+ 查找路径（按优先级，找到即停）：
+ 1. {CWD}/skills/helloagents/skills/commands/{name}/SKILL.md
+diff --git a/bootstrap.md b/bootstrap.md
+index e73f2a8..225aee7 100644
+--- a/bootstrap.md
++++ b/bootstrap.md
+@@ -1,6 +1,6 @@
+ # HelloAGENTS
+ 
+-适用条件：子代理执行特定任务时，仅跳过本文件中的路由、统一执行流程、用户交互流程、输出格式和质量门控，直接执行任务并返回结果。
++适用条件：子代理执行特定任务时，仅跳过本文件中的路由、统一执行流程、用户交互流程、输出格式和完成约束，直接执行任务并返回结果。
+ 排除条件：除上述豁免外，其余规则持续生效；不使用 `~command`，不走六阶段内核流程，不包装输出格式。
+ 
+ ## 配置
+@@ -158,21 +158,18 @@ output_format 为 false 时，所有回复保持自然输出，不适用以下
+ 
+ ## 统一执行流程
+ 
+-所有任务（编码/非编码/新建/改动/修复）都遵循以下六阶段内核流程。
+-每个阶段的深度与任务复杂度成正比——简单任务秒过，复杂任务深入展开。
+-
+ ### 1. ROUTE / TIER — 路由与分层
+-先判断任务类型、风险等级、是否需要 artifact、是否需要子代理，再决定进入哪条路径：
+-- Delivery Tier：
+-  - `T0` — 只读探索、点子比较、方向发散 → 自然响应或 `~idea`
++- 先判断任务类型、风险等级、是否需要结构化产物、是否需要子代理，再决定进入哪条路径：
++- 交付分层（Delivery Tier）：
++  - `T0` — 只读分析、创意探索、方案比较 → 自然响应或 `~idea`
+   - `T1` — 低风险小改动、明确实现、显式验证 → 直接执行或 `~build` / `~verify`
+-  - `T2` — 多文件功能、新项目、需要结构化 artifact → `~plan` 或 `~auto`
++  - `T2` — 多文件功能、新项目、需要结构化产物 → `~plan` 或 `~auto`
+   - `T3` — 高风险或不可逆链路（权限、安全、支付、数据库、生产发布等）→ 先 `~plan` / `~prd`，再 `~build` / `~verify`，必要时单独确认
+-- 点子探索 / 方向比较 → `~idea`
++- 创意探索 / 方案比较 → `~idea`
+ - 明确实现 / 小范围修复 → `~build`
+ - 结构化规划 / 新功能 / 新项目 → `~plan`
+-- 重型产品规格 → `~prd`
+-- 审查 / 跑验证 → `~verify`
++- 完整产品规格 → `~prd`
++- 审查 / 执行验证 → `~verify`
+ - 不确定时由 `~auto` 自动选路
+ 
+ 当前项目只要已建立 `.helloagents/`（例如执行过 `~wiki`、`~init`，或已进入项目级连续流程），就按项目级完整流程执行，不要求项目根载体一定存在。
+@@ -197,7 +194,7 @@ hello-* 技能查找路径（按优先级，找到即停）：
+ - `~plan` 生成 `requirements.md`、`plan.md`、`tasks.md`、`contract.json`
+ - `~prd` 生成 PRD 维度文档、`tasks.md`、`decisions.md`
+ - `~build` 读取现有方案包并做定位，不重复发明方案
+-- `contract.json` 是方案包的机器 contract，至少要明确 `verifyMode`、`reviewerFocus`、`testerFocus`；只有在 T3 / UI / 高风险链路确有收益时，才额外声明 `advisor`；进入 `~verify`、gate 或交付门控前，优先消费它而不是从 prose 里猜验证路径
++- `contract.json` 是方案包的机器契约，至少要明确 `verifyMode`、`reviewerFocus`、`testerFocus`；只有在 T3 / UI / 高风险链路确有收益时，才额外声明 `advisor`；进入 `~verify`、交付门控或最终交付前，优先消费它而不是从自然语言描述里回推验证路径
+ - 涉及 UI 时，设计约束优先级固定为：当前 `plan.md` / PRD UI 决策 → `.helloagents/DESIGN.md` → 通用 UI 规则
+ - `~idea` 在输出比较与推荐后结束，不进入实现，也不创建 `.helloagents/`、`STATE.md` 或方案包
+ 
+@@ -216,8 +213,7 @@ hello-* 技能查找路径（按优先级，找到即停）：
+ 编码任务：
+ - 读取 `skills/hello-verify/SKILL.md`，执行完整验证循环（Ralph Loop）→ 失败则修复 → 循环直到通过
+ - 如本次任务是审查优先或显式使用 `~review`，先读取 `skills/hello-review/SKILL.md` 做范围审查；审查完成后调用 `scripts/review-state.mjs write` 写 `.helloagents/.ralph-review.json`，再进入验证
+-- 通过后收集已读取技能的交付检查清单，逐项附带证据确认
+-- APGD：确认代理指标通过的同时，用户的真正目标也已达成
++- 通过后收集已读取技能的交付检查清单，逐项附带证据确认，并同时确认用户目标已达成
+ 
+ 非编码任务（文档 / 方案 / 审查等）：
+ - 收集已激活技能的交付检查清单，逐项确认通过
+@@ -233,19 +229,18 @@ hello-* 技能查找路径（按优先级，找到即停）：
+   - 已存在且完整则按模板格式更新 `CHANGELOG.md`、相关 `modules/*.md`、增量经验 delta 追加
+ - 符合条件时触发 `hello-reflect`（详见 `hello-reflect` SKILL.md）
+ 
+-## 质量门控
+-所有任务必须遵守三重保障，不可跳过：
+-1. 质量标准 — 已激活的 hello-* 技能规范是强制性的，不是建议
+-2. 流程纪律 — 统一执行流程的每个阶段不可跳过（简单任务可秒过，但不可不过）
+-3. 检查清单 — 完成前收集已激活技能的交付检查清单，逐项附带证据确认通过才能报告完成
++## 完成约束
++- 未进入 `VERIFY / CONSOLIDATE` 的路径，声称完成前必须完成与任务类型匹配的必要检查；无法执行的检查必须明确说明，不得直接宣称完成
++- 已进入统一执行流程、已激活 `hello-*` 技能或存在方案包 / `contract.json` / 证据文件时，以对应 skill、方案包契约、`VERIFY / CONSOLIDATE` 与运行时交付约束为准，不得降级为本节
++- 只读分析、创意探索、方案比较、中间进度和阻塞汇报不适用本节
+ 
+ ## 路由
+ - 默认按上文“统一执行流程 / ROUTE / TIER”选路；除显式 `~command` 外，不另起独立路由规则
+ - 简单任务（单文件修改/明确修复/小调整/已有代码的局部改动）→ 直接执行（⚡）
+ - 必须进入规划（不可跳过）：新项目 / 新应用 / 从零构建 / 涉及 3+ 文件的新功能 / 架构级变更
+-- 轻量探索、显式验证/审查、重型规格等其他分流，均按 ROUTE / TIER 的命令映射执行
++- 创意探索、显式验证/审查、完整规格等其他分流，均按 ROUTE / TIER 的命令映射执行
+ - `~do` 是 `~build` 的兼容别名；`~design` 是 `~plan` 的兼容别名；`~review` 是 `~verify` 的兼容别名
+-- `~command` → 立即读取对应的 SKILL.md 并按其流程执行，不要自行探索或猜测。查找路径（按优先级，找到即停）：
++- `~command` 路由：用户输入 `~xxx` 时，立即读取对应的 SKILL.md 并按其流程执行，不要自行探索或猜测；优先使用当前会话已注入的“当前 HelloAGENTS 读取根目录”或已解析出的具体命令技能文件路径；若当前项目已存在由 `~init` 生成的 AGENTS.md / CLAUDE.md / .gemini/GEMINI.md，这些载体已由宿主自动加载，无需再次读取；仅在需要执行具体命令时读取对应 SKILL.md，不要扫描整个 `skills/helloagents/` 目录，也不要为同一个命令 skill 重复探测多个路径。查找路径（按优先级，找到即停）：
+   1. {CWD}/skills/helloagents/skills/commands/{name}/SKILL.md
+   2. 当前已加载 HelloAGENTS 包根目录下的 skills/commands/{name}/SKILL.md
+   命中路径后立即停止，不要再探测另一路径，更不要重复读取同一命令 skill。
+diff --git a/tests/workflow-runtime-contract.test.mjs b/tests/workflow-runtime-contract.test.mjs
+index d3718a8..caa61f6 100644
+--- a/tests/workflow-runtime-contract.test.mjs
++++ b/tests/workflow-runtime-contract.test.mjs
+@@ -166,6 +166,7 @@ test('workflow templates and bootstrap stay aligned with runtime artifacts', ()
+     assert.match(content, /Delivery Tier/)
+     assert.match(content, /`T0`/)
+     assert.match(content, /`T3`/)
++    assert.match(content, /`~do` 是 `~build` 的兼容别名/)
+     assert.match(content, /plan\.md/)
+     assert.match(content, /contract\.json/)
+     assert.match(content, /\.ralph-verify\.json/)
+@@ -175,9 +176,15 @@ test('workflow templates and bootstrap stay aligned with runtime artifacts', ()
+ 
+   assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /`~idea` 在输出比较与推荐后结束，不进入实现，也不创建 `\.helloagents\/`、`STATE\.md` 或方案包/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /默认按上文“统一执行流程 \/ ROUTE \/ TIER”选路；除显式 `~command` 外，不另起独立路由规则/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /## 完成约束/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /未进入 `VERIFY \/ CONSOLIDATE` 的路径/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /主线事实源优先级/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /项目级恢复游标/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap.md')), /\.ralph-advisor\.json/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /不创建：`~help`、`~idea`/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /### 质量下限（全阶段生效，按项目类型适用）/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /现代基线：使用目标平台当前稳定、主流、可维护的框架、API 和工程模式/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /## 完成约束/)
++  assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /未激活项目且未进入方案包 \/ `contract\.json` \/ 证据链路时/)
+   assert.match(readText(join(REPO_ROOT, 'bootstrap-lite.md')), /主线事实源优先级/)
+ })
