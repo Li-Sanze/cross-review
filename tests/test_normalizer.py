@@ -193,3 +193,42 @@ class TestNormalizer:
     def test_pack_completeness_is_computed_inside_normalizer(self):
         result = normalize_review_output(RAW_OUTPUT, PACK)
         assert result.quality_metrics.pack_completeness > 0.0
+
+    def test_observations_not_absorbed_into_last_finding_category(self):
+        """Regression: ## Observations after findings must not pollute the
+        last finding's category field (normalizer category pollution)."""
+        raw = """\
+## Section 1: Findings
+
+**f-001**
+- **Where**: `src/auth.py`, line 35
+- **What**: URL classifier uses substring match instead of host parsing.
+- **Why**: A proxy URL containing the target hostname would be misrouted.
+- **Severity estimate**: MEDIUM
+- **Category**: missing_validation
+
+**f-002**
+- **Where**: `src/auth.py`, line 39
+- **What**: Trailing slash handling misses nested paths.
+- **Why**: URLs like /openai/v1 are not excluded by the endswith check.
+- **Severity estimate**: MEDIUM
+- **Category**: logic_error
+
+## Observations
+
+- The routing logic depends on exact URL conventions.
+- Additional tests around proxy hostnames would reduce risk.
+
+## Overall Assessment
+
+The changes address real concerns but the URL classifier is too loose.
+"""
+        result = normalize_review_output(raw, PACK)
+        assert len(result.findings) == 2
+        assert result.findings[0].category == "missing_validation"
+        assert result.findings[1].category == "logic_error"
+        # Ensure no observation text leaked into categories
+        for f in result.findings:
+            assert len(f.category) < 50, (
+                f"category '{f.category[:60]}...' looks polluted"
+            )

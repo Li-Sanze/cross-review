@@ -19,7 +19,7 @@ from .schema import (
 
 DEFAULT_MAX_FINDINGS = 7
 _SECTION_RE = re.compile(
-    r"(?ms)^#+\s*Section 1:\s*Findings\s*(.*?)(?:^#+\s*Section 2:|^---\s*$|\Z)"
+    r"(?ms)^#+\s*Section 1:\s*Findings\s*(.*?)(?:^#+\s*Section 2:|^##(?!#)\s|^---\s*$|\Z)"
 )
 _BLOCK_START_RE = re.compile(r"(?m)^(?:\*\*(f-\d{3})\*\*|###\s+(f-\d{3}))\s*$")
 _HEDGE_RE = re.compile(
