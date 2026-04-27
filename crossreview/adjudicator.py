@@ -37,11 +37,12 @@ def determine_advisory_verdict(
     2. truncated budget → CONCERNS
     3. evidence error/skipped → CONCERNS
     4. speculative_ratio > 50% → CONCERNS
-    5. medium/high findings → CONCERNS
-    6. any findings → CONCERNS
-    7. evidence failed + no findings → NEEDS_HUMAN_TRIAGE
-    8. pack_completeness >= 0.7 → PASS_CANDIDATE
-    9. fallback → INCONCLUSIVE
+    5. evidence failed + findings → CONCERNS
+    6. medium/high findings → CONCERNS
+    7. any findings → CONCERNS
+    8. evidence failed + no findings → NEEDS_HUMAN_TRIAGE
+    9. pack_completeness >= 0.7 → PASS_CANDIDATE
+    10. fallback → INCONCLUSIVE
     """
     evidence = pack.evidence or []
     has_fail = any(item.status.value == "fail" for item in evidence)

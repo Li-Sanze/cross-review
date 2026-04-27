@@ -41,7 +41,7 @@ ARTIFACT_ADAPTERS = {
     "code_diff": {
         "prompt_template": "templates/code_diff.md",      # diff-specific instructions
         "constraint_config": CODE_DIFF_CONSTRAINTS,        # HIGH requires EXACT+PLAUSIBLE
-        "eval_config": "eval/code_diff/release-gate.yaml", # 8 指标
+        "eval_config": "eval/code_diff/release-gate.yaml", # 9 指标
     },
     "design_doc": {
         "prompt_template": "templates/design_doc.md",      # 耦合度/扩展性/遗漏检查
@@ -137,6 +137,8 @@ Sopify Core validates checkpoint proposal → Core materializes decision/clarifi
 ```
 
 **默认 OFF**（ADR-009 flow priority）：Phase 4a 由 LLM 自主决定是否调用；Phase 4b 需用户在 `sopify.config.yaml` 中显式启用 pipeline_hooks。
+
+**Convention 验证数据边界**：Phase 4a dogfood 产出的 advisory 数据（verdict 分布、unclear_rate 趋势、prompt 遵从度）会被 Sopify 消费，用于评估 Protocol Step 2/3 的推进时机和 Convention 模式的可行性。但 Protocol 架构决策的责任在 Sopify 侧，CR 只负责 advisory 能力和 dogfood 数据的生产。
 
 ### 3.2 GitHub Action（v1）
 
