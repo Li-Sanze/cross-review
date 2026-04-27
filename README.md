@@ -32,15 +32,18 @@ This separation has two practical effects:
 - It increases reviewer independence, because the second pass must justify findings from the artifact rather than from inherited session state.
 - It improves auditability, because reviewer claims can be checked against `ReviewPack` contents, emitted findings, and deterministic normalization rules.
 
-## Early Results
+## Eval Results
 
-Preliminary evaluation across 4 real-world fixtures (tool-assisted isolated reviewer, claude-opus-4.6):
+Full evaluation across 33 fixtures (claude-opus-4.6, external_only scope):
 
-- **Precision 1.00** — zero false positives (improved from 0.45 in Round 1 after introducing Findings/Observations split)
-- **Recall 0.75** — one baseline finding missed (bash multiline continuation semantics)
-- **Invalid findings per run: 0.00**
+| Metric | Value | Gate |
+|--------|-------|------|
+| Precision | 0.885 | ≥ 0.70 ✅ |
+| Recall | 0.929 | ≥ 0.80 ✅ |
+| Unclear rate | 0.133 | ≤ 0.150 ✅ |
+| Invalid findings / run | 1 | ≤ 2 ✅ |
 
-These results validate the direction but are too small to be conclusive. A full eval harness with 13+ fixtures and [8 release gate metrics](docs/v0-scope.md) is in progress.
+**All 9 release gate metrics pass** — `blocking_pass: true`. See [v0-scope.md §12](docs/v0-scope.md) for the full gate definition.
 
 ## Quick Start
 
@@ -264,7 +267,7 @@ Takes raw analysis text from a host-integrated review session and produces a sta
 | Render Prompt CLI | ✅ Done | `crossreview render-prompt --pack` (host-integrated front half) |
 | Ingest CLI | ✅ Done | `crossreview ingest --raw-analysis --pack --model` (host-integrated back half) |
 | Evidence Collector | 🔜 Next | ReviewPack.evidence path exists, empty evidence works |
-| Eval Harness | 🔜 Planned | Release gate validation with fixtures |
+| Eval Harness | ✅ Done | 33 fixtures, 9/9 gate metrics pass, `blocking_pass: true` |
 | Human-readable Output | ✅ Done | `--format human` on verify/ingest |
 | One-stop Verify | 🔜 Next | `crossreview verify --diff` (pack + review in one step) |
 
@@ -274,7 +277,7 @@ Takes raw analysis text from a host-integrated review session and produces a sta
 
 **Out of scope (v0)**: Python SDK · MCP Server · Agent Skill · CI/CD Action · cross-model reviewer · verdict = block
 
-**Release gate**: v0 must pass [8 blocking metrics](docs/v0-scope.md) (§12), including manual_recall ≥ 0.80, precision ≥ 0.70, fixture_count ≥ 20, invalid_findings_per_run ≤ 2, and 4 others. Fail → revert to prompt pattern, no standalone product.
+**Release gate**: v0 must pass [9 blocking metrics](docs/v0-scope.md) (§12), including manual_recall ≥ 0.80, precision ≥ 0.70, fixture_count ≥ 20, invalid_findings_per_run ≤ 2, and 5 others. All 9 currently pass (`blocking_pass: true`).
 
 ## License
 
