@@ -62,7 +62,13 @@ crossreview pack --diff HEAD~1 --intent "fix auth token refresh" > pack.json
 crossreview verify --pack pack.json
 ```
 
-`crossreview verify` outputs `ReviewResult` JSON to stdout (default), or human-readable text with `--format human`:
+Or in one step:
+
+```bash
+crossreview verify --diff HEAD~1 --intent "fix auth token refresh"
+```
+
+`crossreview verify --diff` outputs human-readable text by default. `crossreview verify --pack` outputs `ReviewResult` JSON (default), or human-readable text with `--format human`:
 
 ```jsonc
 {
@@ -198,12 +204,19 @@ crossreview pack --diff main..feat --intent "add caching" --focus cache --contex
 
 ### `crossreview verify`
 
+Two modes: `--pack` (verify a pre-built ReviewPack) or `--diff` (one-stop: pack + verify).
+
 ```bash
+# one-stop: pack + verify, human output by default
+crossreview verify --diff HEAD~1
+crossreview verify --diff HEAD~1 --intent "fix auth" --focus auth
+
+# verify a pre-built pack, JSON output by default
 crossreview verify --pack pack.json
 crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider anthropic
 ```
 
-`crossreview verify` also requires reviewer configuration to resolve successfully:
+`crossreview verify` requires reviewer configuration to resolve successfully:
 
 - `--model / --provider / --api-key-env`
 - or `crossreview.yaml`
@@ -212,8 +225,13 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 
 | Flag | Description |
 |------|-------------|
-| `--pack FILE` | Path to ReviewPack JSON |
-| `--format FORMAT` | Output format: `json` (default) or `human` |
+| `--diff REF` | Git ref for diff (e.g. `HEAD~1`, `main..feat`). Assembles ReviewPack inline. Mutually exclusive with `--pack` |
+| `--pack FILE` | Path to ReviewPack JSON. Mutually exclusive with `--diff` |
+| `--intent TEXT` | Task intent string (--diff mode) |
+| `--task FILE` | Task description file (--diff mode) |
+| `--focus TERM` | Focus area, repeatable (--diff mode) |
+| `--context FILE` | Extra context file, repeatable (--diff mode) |
+| `--format FORMAT` | Output format. Defaults to `human` with `--diff`, `json` with `--pack` |
 | `--model TEXT` | Override reviewer model |
 | `--provider TEXT` | Override provider (currently `anthropic` only) |
 | `--api-key-env VAR` | Override API key env variable name |
@@ -269,7 +287,7 @@ Takes raw analysis text from a host-integrated review session and produces a sta
 | Evidence Collector | 🔜 Next | ReviewPack.evidence path exists, empty evidence works |
 | Eval Harness | ✅ Done | 33 fixtures, 9/9 gate metrics pass, `blocking_pass: true` |
 | Human-readable Output | ✅ Done | `--format human` on verify/ingest |
-| One-stop Verify | 🔜 Next | `crossreview verify --diff` (pack + review in one step) |
+| One-stop Verify | ✅ Done | `crossreview verify --diff` (pack + review in one step, default `--format human`) |
 
 ## v0 Scope
 

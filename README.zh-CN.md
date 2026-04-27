@@ -62,7 +62,13 @@ crossreview pack --diff HEAD~1 --intent "fix auth token refresh" > pack.json
 crossreview verify --pack pack.json
 ```
 
-`crossreview verify` 输出 `ReviewResult` JSON 到 stdout（默认），或用 `--format human` 获得终端可读格式：
+或一步完成：
+
+```bash
+crossreview verify --diff HEAD~1 --intent "fix auth token refresh"
+```
+
+`crossreview verify --diff` 默认输出终端可读格式。`crossreview verify --pack` 默认输出 `ReviewResult` JSON，或用 `--format human` 获得终端可读格式：
 
 ```jsonc
 {
@@ -198,12 +204,19 @@ crossreview pack --diff main..feat --intent "add caching" --focus cache --contex
 
 ### `crossreview verify`
 
+两种模式：`--pack`（验证已有 ReviewPack）或 `--diff`（一站式：打包 + 审查）。
+
 ```bash
+# 一站式：打包 + 审查，默认 human 格式输出
+crossreview verify --diff HEAD~1
+crossreview verify --diff HEAD~1 --intent "修复 auth" --focus auth
+
+# 验证已有 pack，默认 JSON 格式输出
 crossreview verify --pack pack.json
 crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider anthropic
 ```
 
-`crossreview verify` 还要求 reviewer 配置能成功解析，来源可以是：
+`crossreview verify` 要求 reviewer 配置能成功解析，来源可以是：
 
 - `--model / --provider / --api-key-env`
 - 或 `crossreview.yaml`
@@ -212,8 +225,13 @@ crossreview verify --pack pack.json --model claude-sonnet-4-20250514 --provider 
 
 | 参数 | 说明 |
 |------|------|
-| `--pack FILE` | ReviewPack JSON 文件路径 |
-| `--format FORMAT` | 输出格式：`json`（默认）或 `human` |
+| `--diff REF` | git diff 基准（如 `HEAD~1`、`main..feat`）。内联组装 ReviewPack，与 `--pack` 互斥 |
+| `--pack FILE` | ReviewPack JSON 文件路径，与 `--diff` 互斥 |
+| `--intent TEXT` | 任务意图（--diff 模式） |
+| `--task FILE` | 任务描述文件（--diff 模式） |
+| `--focus TERM` | 重点审查区域，可重复（--diff 模式） |
+| `--context FILE` | 额外 context 文件，可重复（--diff 模式） |
+| `--format FORMAT` | 输出格式。`--diff` 默认 `human`，`--pack` 默认 `json` |
 | `--model TEXT` | 覆盖 reviewer 模型 |
 | `--provider TEXT` | 覆盖 provider（当前仅 `anthropic`） |
 | `--api-key-env VAR` | 覆盖 API key 环境变量名 |
@@ -269,7 +287,7 @@ crossreview ingest --raw-analysis - --pack pack.json --model host_unknown --prom
 | Evidence Collector | 🔜 待做 | ReviewPack.evidence 通路已有，空 evidence 可正常运行 |
 | Eval Harness | ✅ 完成 | 33 fixtures，9/9 gate 通过，`blocking_pass: true` |
 | 可读输出 | ✅ 完成 | verify/ingest 支持 `--format human` |
-| 一站式 Verify | 🔜 待做 | `crossreview verify --diff`（pack + review 一步完成） |
+| 一站式 Verify | ✅ 完成 | `crossreview verify --diff`（一步完成 pack + review，默认 `--format human`） |
 
 ## v0 边界
 
