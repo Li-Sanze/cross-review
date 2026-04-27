@@ -37,6 +37,7 @@ from .pack import (
 )
 from .verify import run_verify_pack
 from .schema import (
+    ReviewPack,
     review_pack_from_dict,
     review_result_to_json,
     validate_review_pack,
@@ -188,8 +189,13 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_pack_from_diff(args: argparse.Namespace):
-    """Assemble a ReviewPack from ``--diff`` args. Returns the pack or None on error."""
+def _build_pack_from_diff(args: argparse.Namespace) -> ReviewPack | None:
+    """Assemble a ReviewPack from ``--diff`` args. Returns the pack or None on error.
+
+    Note: ``--intent``, ``--task``, ``--focus``, and ``--context`` are pack flags
+    shared by the ``pack`` subcommand and ``verify --diff`` mode; they are ignored
+    when ``verify --pack`` is used.
+    """
     try:
         diff = diff_from_git(args.diff)
     except GitDiffError as exc:
@@ -207,7 +213,7 @@ def _build_pack_from_diff(args: argparse.Namespace):
         return None
 
     task_content: str | None = None
-    if getattr(args, "task", None):
+    if args.task:
         try:
             task_content = read_task_file(args.task)
         except OSError as exc:
@@ -218,7 +224,7 @@ def _build_pack_from_diff(args: argparse.Namespace):
             return None
 
     context_files = None
-    if getattr(args, "context", None):
+    if args.context:
         try:
             context_files = read_context_files(args.context)
         except OSError as exc:
@@ -232,9 +238,9 @@ def _build_pack_from_diff(args: argparse.Namespace):
         return assemble_pack(
             diff,
             changed_files=changed_files,
-            intent=getattr(args, "intent", None),
+            intent=args.intent,
             task_file=task_content,
-            focus=getattr(args, "focus", None),
+            focus=args.focus,
             context_files=context_files,
         )
     except ValueError as exc:
