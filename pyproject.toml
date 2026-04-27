@@ -1,6 +1,6 @@
 [project]
 name = "crossreview"
-version = "0.0.1-alpha"
+version = "0.1.0a1"
 description = "Context-isolated verification harness for AI-generated code"
 readme = "README.md"
 license = "MIT"
