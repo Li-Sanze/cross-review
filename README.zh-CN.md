@@ -271,6 +271,16 @@ crossreview ingest --raw-analysis - --pack pack.json --model host_unknown --prom
 | `--input-tokens INT` | 宿主侧 input token 计数（可选） |
 | `--output-tokens INT` | 宿主侧 output token 计数（可选） |
 
+### 退出码
+
+所有命令在成功产出 `ReviewResult` 时返回 **0**，无论 `review_status` 或 `advisory_verdict` 是什么。非零退出码表示命令未能产出结果（输入无效、缺 API key、空 diff 等）。
+
+自动化场景请检查 JSON 输出中的 `review_status` 和 `advisory_verdict`，不要仅凭退出码判断 review 是否通过：
+
+```bash
+crossreview verify --diff HEAD~1 --format json | jq -e '.advisory_verdict == "pass_candidate"'
+```
+
 ## 当前状态
 
 | 组件 | 状态 | 说明 |

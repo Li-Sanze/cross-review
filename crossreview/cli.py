@@ -307,6 +307,12 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     else:
+        _diff_only = [f for f in ("intent", "task", "focus", "context") if getattr(args, f, None)]
+        if _diff_only:
+            print(
+                f"warning: --{'/--'.join(_diff_only)} ignored in --pack mode (only used with --diff)",
+                file=sys.stderr,
+            )
         pack = _load_pack(args.pack)
         if pack is None:
             return 1

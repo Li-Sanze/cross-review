@@ -271,6 +271,16 @@ Takes raw analysis text from a host-integrated review session and produces a sta
 | `--input-tokens INT` | Host-reported input token count (optional) |
 | `--output-tokens INT` | Host-reported output token count (optional) |
 
+### Exit Codes
+
+All commands return **0** when a `ReviewResult` is successfully produced, regardless of `review_status` or `advisory_verdict`. A non-zero exit code means the command failed to produce output (invalid input, missing API key, empty diff, etc.).
+
+For automation, check `review_status` and `advisory_verdict` in the JSON output instead of relying on the exit code:
+
+```bash
+crossreview verify --diff HEAD~1 --format json | jq -e '.advisory_verdict == "pass_candidate"'
+```
+
 ## Status
 
 | Component | Status | Notes |

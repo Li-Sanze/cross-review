@@ -475,6 +475,10 @@ class TestVerifyCLI:
         out = capsys.readouterr().out
         parsed = json.loads(out)
         assert parsed["review_status"] == "complete"
+        # Verify intent was passed through to the reviewer backend
+        backend.review.assert_called_once()
+        pack_arg = backend.review.call_args[0][0]
+        assert pack_arg.intent == "fix auth"
 
     def test_verify_diff_pack_mutually_exclusive(self, capsys, tmp_path):
         """--diff and --pack cannot be used together."""
@@ -523,6 +527,35 @@ class TestVerifyCLI:
         out = capsys.readouterr().out
         parsed = json.loads(out)
         assert parsed["schema_version"] == "0.1-alpha"
+
+    def test_verify_pack_mode_warns_on_diff_only_flags(self, capsys, tmp_path):
+        """verify --pack with --intent should warn about ignored flags."""
+        pack_path = self._write_pack(tmp_path, intent="check me")
+        with (
+            patch("crossreview.cli.resolve_reviewer_config") as resolve_cfg,
+            patch("crossreview.verify.resolve_reviewer_backend") as resolve_backend,
+        ):
+            resolve_cfg.return_value = type(
+                "Cfg", (), {"provider": "anthropic", "model": "claude-test", "api_key_env": "KEY"}
+            )()
+            backend = resolve_backend.return_value
+            backend.review.return_value = type(
+                "Resp",
+                (),
+                {
+                    "raw_analysis": "## Section 1: Findings\n\n(none)\n\n## Section 2: Observations\n\n(none)\n",
+                    "model": "claude-test",
+                    "latency_sec": 0.5,
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                },
+            )()
+            rc = main(["verify", "--pack", str(pack_path), "--intent", "ignored intent"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "warning" in err
+        assert "ignored" in err
 
 
 # ---------------------------------------------------------------------------
