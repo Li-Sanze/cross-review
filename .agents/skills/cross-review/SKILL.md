@@ -12,6 +12,7 @@ description: >-
 前置条件：
 - 工作区存在未评审的代码变更（`git diff` 非空）
 - `crossreview` CLI 已安装（`pip install crossreview` 或 `pip install -e .`）
+- Reviewer API key 已配置（环境变量 `ANTHROPIC_API_KEY`，或 `crossreview.yaml` 中设置）
 
 ## 默认流程（One-Stop）
 
@@ -71,7 +72,8 @@ Advisory Verdict: <verdict>
 ### Step 4 — 根据 verdict 分支处理
 
 [IF review_status != "complete"]
-  [ACTION: LOG_WARNING] 记录非正常状态，继续主流程，不阻断。
+  [ACTION: LOG_WARNING] 记录非正常状态（rejected / failed），继续主流程，不阻断。
+  [SKIP] 不进入以下 verdict 分支。
 
 [IF Advisory Verdict == "pass_candidate"]
   [ACTION: CONTINUE]
