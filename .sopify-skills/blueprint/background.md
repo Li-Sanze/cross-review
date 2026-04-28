@@ -16,6 +16,43 @@ CrossReview 定位为 **独立审查基础设施 / external quality loop**：
 - **与 Sopify 的关系**：CrossReview 是独立产品，Sopify 是首个深度集成宿主。CrossReview 不依赖 Sopify；Sopify 集成只能走 advisory 或 checkpoint proposal，不能直接写 Sopify state。
 - **v0 通过前**：路线图仍以 plan 为准，不固化到 blueprint。
 
+## 组织与生态归属
+
+CrossReview 的推荐治理口径是：
+
+> **作为独立产品，长期宜放在 Sopify 同 org 下的独立 repo，并坚持 standalone-first。**
+
+这意味着：
+
+- **代码层**：CrossReview 不并入 Sopify 主仓库
+- **生态层**：可作为 Sopify ecosystem 的 reference verifier / curated component
+- **产品层**：仍保持宿主无关与独立对外叙事，不是 Sopify 专属模块
+
+### 当前阶段判断
+
+CrossReview 目前仍处于 **验证型 incubator** 状态，因此：
+
+- 当前继续保留在个人仓库是可接受的
+- 迁移到同 org 下独立 repo 应作为 **后置里程碑**
+- 不建议为了品牌整齐而在 v0 gate 之前立刻迁仓
+
+### 迁移触发条件
+
+满足以下条件后，应正式评估迁移：
+
+1. v0 scope / release gate / 发布路径已基本稳定
+2. 对外准备将 CrossReview 作为 Sopify 生态中的默认高价值 verifier 叙事
+3. 当前个人仓库状态开始影响 ownership、bus factor、外部信任或合作预期
+
+### Standalone-first 口径
+
+即使未来放到 `sopify-ai` 同 org 下，CrossReview 仍应坚持：
+
+- README 首屏先写 standalone quick start
+- ReviewPack / ReviewResult 保持宿主无关 contract
+- 发布、eval、CLI 入口独立于 Sopify
+- 对外统一表述为：**Sopify 是 first deep host，不是 exclusive host**
+
 ## 为什么做
 
 手工 fresh-session cross-review 已被证明有效——新开 session 往往比原 session 的"自审"更容易发现回归、遗漏和逻辑不一致。但手工流程不可重复、不可度量、每次 ~5 分钟 copy-paste。

@@ -98,8 +98,12 @@ Sopify develop 完成所有 task
   ↓
 LLM 发现 cross-review SKILL.md（advisory mode）
   ↓
-LLM 自行执行: crossreview verify --diff --format human
-  └─ 回退: crossreview pack --diff → crossreview verify --pack
+LLM 自行执行: crossreview pack --diff → crossreview render-prompt
+  ↓
+宿主 fresh / isolated review context 执行 canonical prompt
+  ↓
+LLM 自行执行: crossreview ingest --format human
+  └─ 回退: crossreview verify --diff --format human（standalone，需要 reviewer config / API key）
   ↓
 ├── pass_candidate → 继续 finalize
 ├── concerns → 展示 findings，用户决定
