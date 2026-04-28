@@ -19,10 +19,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from dataclasses import fields as dc_fields
-from enum import Enum
 from pathlib import Path
-from typing import Any
 
 from .schema import (
     ArtifactType,
@@ -32,6 +29,7 @@ from .schema import (
     PackBudget,
     ReviewPack,
     compute_fingerprint,
+    to_serializable,
     validate_review_pack,
     SCHEMA_VERSION,
 )
@@ -258,23 +256,10 @@ def read_context_files(paths: list[str]) -> list[ContextFile]:
 # Serialization — ReviewPack → dict / JSON
 # ---------------------------------------------------------------------------
 
-def _to_serializable(obj: Any) -> Any:
-    """Recursively convert dataclasses / enums to JSON-native types."""
-    if isinstance(obj, Enum):
-        return obj.value
-    if hasattr(obj, "__dataclass_fields__"):
-        return {
-            f.name: _to_serializable(getattr(obj, f.name))
-            for f in dc_fields(obj)
-        }
-    if isinstance(obj, list):
-        return [_to_serializable(item) for item in obj]
-    return obj
-
 
 def pack_to_dict(pack: ReviewPack) -> dict:
     """Convert a ReviewPack to a JSON-serializable dict."""
-    return _to_serializable(pack)
+    return to_serializable(pack)
 
 
 def pack_to_json(pack: ReviewPack, *, indent: int = 2, exclude_pack_fp: bool = False) -> str:

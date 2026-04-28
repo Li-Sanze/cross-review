@@ -42,9 +42,18 @@ class NormalizationResult:
     raw_findings: list[Finding]
     findings: list[Finding]
     quality_metrics: QualityMetrics
-    raw_findings_count: int
-    emitted_findings_count: int
-    noise_count: int
+
+    @property
+    def raw_findings_count(self) -> int:
+        return self.quality_metrics.raw_findings_count
+
+    @property
+    def emitted_findings_count(self) -> int:
+        return self.quality_metrics.emitted_findings_count
+
+    @property
+    def noise_count(self) -> int:
+        return self.quality_metrics.noise_count
 
 
 def _section_findings(text: str) -> str:
@@ -284,7 +293,4 @@ def normalize_review_output(
         raw_findings=parsed_findings,
         findings=emitted_findings,
         quality_metrics=quality_metrics,
-        raw_findings_count=raw_findings_count,
-        emitted_findings_count=len(emitted_findings),
-        noise_count=noise_count,
     )
