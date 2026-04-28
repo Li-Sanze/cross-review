@@ -54,16 +54,47 @@ ReviewPack → fresh_llm_reviewer → FindingNormalizer → Adjudicator → Revi
 - CrossReview bridge 只能 propose checkpoint，不能直接写入 Sopify state
 - Pipeline hook 检查由 Sopify Plugin Runtime / Core validation layer 负责，不由 engine 硬编码
 
+### Loop Mode（v0.5+ 预留）
+
+CrossReview v0 是 single-pass 验证。Loop mode 是 v0.5+ 的自然延伸：在同一 diff 上反复 review → 修复 → re-review，直到达到收敛条件。
+
+**设计原则：置信度驱动停止，不是轮次驱动。**
+
+**Stop policy（优先级从高到低）：**
+
+| 优先级 | 条件 | 行为 |
+|--------|------|------|
+| 1. 质量达标 | verdict == pass_candidate 且 actionable high/medium == 0 | STOP: loop 成功 |
+| 2. 人工介入 | verdict == needs_human_triage | STOP: 自动化无法解决 |
+| 3. 无进展 | 连续 N 轮 actionable_findings 未减少 | STOP: 继续无意义 |
+| 4. 信号衰减 | speculative_ratio 持续上升且 > 阈值 | STOP: 信号质量下降 |
+| 5. 兜底 | rounds >= max_rounds | STOP: 安全上限 |
+
+**关键约束：**
+- 所有停止信号均来自 ReviewResult 已有字段（verdict、findings severity/confidence/actionable、quality_metrics），不引入新评估维度
+- Stop policy 是 ReviewResult 的**消费者**，不是新的评估层
+- Loop mode 内置于 CrossReview CLI（`crossreview verify --loop`），不依赖外部 orchestrator——符合 standalone-first
+- 默认 stop policy 为 hardcoded 规则链；power user 可通过 `crossreview.yaml` 覆写阈值
+- Evidence collector（`--evidence-cmd`）是 loop mode 的前置增强：有 evidence 时 stop policy 可交叉验证（verdict + evidence.all_pass），信号更可靠
+
+**与 Verify Loop 的关系（D-CR1 决策）：**
+
+Verify Loop 的核心抽象（artifact_pack / rubric / evaluator / verdict / run_result / stop_policy）与 CrossReview 的 ReviewPack / ReviewResult 高度重合（6/7 概念对应）。不单独建 verify-loop 项目；好想法吸收进 CrossReview：
+- stop_policy → loop mode（本节）
+- rubric → focus areas 的结构化增强（v1+）
+- multi-artifact routing → ArtifactType 枚举扩展 + per-type prompt 模板（v1+）
+- evaluator pluggable → ReviewerBackend protocol 已支持
+
 ### Repo / 组织策略补充
 
 CrossReview 的长期推荐形态是：
 
 | 维度 | 口径 |
 |------|------|
-| 仓库归属 | 迁往 `evidentloop` 同 org 下的独立 repo |
-| 当前阶段 | 在个人仓库继续 incubate，直到 v0 gate 与发布路径稳定 |
+| 仓库归属 | 已迁移至 `evidentloop/CrossReview` 独立 repo |
+| 当前阶段 | 在 `evidentloop` org 下继续 incubate，直到 v0.5 dogfood 与发布路径稳定 |
 | 产品叙事 | 独立 verifier，不是 Sopify 私有模块 |
 | 宿主关系 | Sopify 是 first deep host，不是 exclusive host |
 | contract 约束 | ReviewPack / ReviewResult 不引入 Sopify 内部状态词 |
 
-当前不建议因此单独优化 org 名。只要 sibling repo 保持 standalone-first，`evidentloop` 不会自动把 CrossReview 锁定为 Sopify-only 产品；是否需要更中性的 umbrella org，应在出现明确外部 adoption / 品牌信号后再评估。
+当前 org 名已固定为 `evidentloop`。只要 sibling repo 保持 standalone-first，`evidentloop` 不会自动把 CrossReview 锁定为 Sopify-only 产品；是否需要再次调整 umbrella org，应在出现明确外部 adoption / 品牌信号后再评估。

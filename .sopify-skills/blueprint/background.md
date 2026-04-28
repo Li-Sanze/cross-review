@@ -20,7 +20,7 @@ CrossReview 定位为 **独立审查基础设施 / external quality loop**：
 
 CrossReview 的推荐治理口径是：
 
-> **作为独立产品，长期宜放在 Sopify 同 org 下的独立 repo，并坚持 standalone-first。**
+> **作为独立产品，CrossReview 已迁移至 `evidentloop/CrossReview` 独立 repo，并继续坚持 standalone-first。**
 
 这意味着：
 
@@ -32,21 +32,21 @@ CrossReview 的推荐治理口径是：
 
 CrossReview 目前仍处于 **验证型 incubator** 状态，因此：
 
-- 当前继续保留在个人仓库是可接受的
-- 迁移到同 org 下独立 repo 应作为 **后置里程碑**
-- 不建议为了品牌整齐而在 v0 gate 之前立刻迁仓
+- 当前已完成 GitHub org 迁移，仓库归属为 `evidentloop/CrossReview`
+- 迁移只改变治理归属，不改变 CrossReview 的 standalone-first 产品边界
+- 不因进入同 org 而并入 Sopify 主仓库，也不引入 Sopify-only contract
 
-### 迁移触发条件
+### 迁移完成后的保持条件
 
-满足以下条件后，应正式评估迁移：
+迁移完成后，仍需持续保持：
 
-1. v0 scope / release gate / 发布路径已基本稳定
-2. 对外准备将 CrossReview 作为 Sopify 生态中的默认高价值 verifier 叙事
-3. 当前个人仓库状态开始影响 ownership、bus factor、外部信任或合作预期
+1. v0 scope / release gate / 发布路径事实以 README / CHANGELOG / PyPI / tag 为准
+2. 对外可作为 Sopify 生态中的默认高价值 verifier 叙事
+3. ownership、bus factor、外部信任或合作预期由 `evidentloop` org 承载
 
 ### Standalone-first 口径
 
-即使未来放到 `evidentloop` 同 org 下，CrossReview 仍应坚持：
+即使已放到 `evidentloop` 同 org 下，CrossReview 仍应坚持：
 
 - README 首屏先写 standalone quick start
 - ReviewPack / ReviewResult 保持宿主无关 contract
