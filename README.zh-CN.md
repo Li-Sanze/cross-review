@@ -1,5 +1,10 @@
 # CrossReview
 
+[![CI](https://github.com/evidentloop/cross-review/actions/workflows/ci.yml/badge.svg)](https://github.com/evidentloop/cross-review/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/crossreview)](https://pypi.org/project/crossreview/)
+[![Python](https://img.shields.io/pypi/pyversions/crossreview)](https://pypi.org/project/crossreview/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 [English](README.md) | 简体中文
 
 > AI 编码助手的自动化交叉审查 —— 用全新的隔离 LLM session 验证助手的产出。
