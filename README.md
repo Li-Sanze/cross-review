@@ -56,6 +56,7 @@ Full evaluation across 33 fixtures (claude-opus-4.6, external_only scope):
 pip install crossreview              # from PyPI (v0.1.0a1+)
 pip install -e .                     # local dev (pack + verify commands)
 pip install -e '.[anthropic]'        # + Anthropic standalone reviewer backend
+pip install -e '.[dev]'              # dev dependencies (pytest + ruff)
 
 # configure standalone verify via flags, crossreview.yaml, or env vars
 # example:
@@ -173,15 +174,6 @@ crossreview verify --diff HEAD~1 --intent "fix auth token refresh"
 ```
 
 Only the Reviewer calls an LLM. Everything else is rule-based — no AI in the loop.
-
-## Installation
-
-```bash
-pip install crossreview              # from PyPI (v0.1.0a1+)
-pip install -e .                     # local dev (pack + verify commands)
-pip install -e '.[anthropic]'        # + Anthropic standalone reviewer backend
-pip install -e '.[dev]'              # dev dependencies (pytest + ruff)
-```
 
 Two reviewer backend modes:
 
