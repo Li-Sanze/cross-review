@@ -7,7 +7,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-> Automated cross-review for AI coding assistants — a fresh, isolated LLM session verifies what your assistant produced.
+> Automated cross-review for AI coding — same model, clean session, independent second pass on your output.
 
 ## What is Cross-Review?
 
