@@ -12,6 +12,7 @@ import pytest
 from crossreview.pack import (
     GitDiffError,
     assemble_pack,
+    build_diff_source,
     changed_files_from_git,
     compute_pack_completeness,
     detect_language,
@@ -25,6 +26,8 @@ from crossreview.pack import (
 from crossreview.schema import (
     ArtifactType,
     ContextFile,
+    DiffSource,
+    GitDiffSource,
     Evidence,
     EvidenceStatus,
     FileMeta,
@@ -584,3 +587,178 @@ class TestFileIO:
     def test_read_context_file_missing(self, tmp_path: Path):
         with pytest.raises(FileNotFoundError):
             read_context_files([str(tmp_path / "nonexistent.md")])
+
+
+# ===== Git Diff — staged / unstaged modes =====
+
+class TestDiffFromGitWorktree:
+    """diff_from_git staged and unstaged modes."""
+
+    @patch("crossreview.pack.subprocess.run")
+    def test_staged_command(self, mock_run: MagicMock):
+        """staged=True → git diff --cached."""
+        mock_run.return_value = MagicMock(stdout="staged diff")
+        result = diff_from_git(staged=True)
+        assert result == "staged diff"
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["git", "--no-pager", "diff", "--cached"]
+
+    @patch("crossreview.pack.subprocess.run")
+    def test_unstaged_command(self, mock_run: MagicMock):
+        """No ref, no staged → git diff (unstaged working tree)."""
+        mock_run.return_value = MagicMock(stdout="unstaged diff")
+        result = diff_from_git()
+        assert result == "unstaged diff"
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["git", "--no-pager", "diff"]
+
+    @patch("crossreview.pack.subprocess.run")
+    def test_staged_ignores_ref_when_staged_flag_set(self, mock_run: MagicMock):
+        """staged=True takes priority; ref kwarg has no effect (caller should not pass both)."""
+        mock_run.return_value = MagicMock(stdout="")
+        diff_from_git(staged=True)
+        cmd = mock_run.call_args[0][0]
+        assert "--cached" in cmd
+        assert "HEAD" not in cmd
+
+
+class TestChangedFilesFromGitWorktree:
+    """changed_files_from_git staged and unstaged modes."""
+
+    @patch("crossreview.pack.subprocess.run")
+    def test_staged_command(self, mock_run: MagicMock):
+        """staged=True → git diff --name-only -z --cached."""
+        mock_run.return_value = MagicMock(stdout="src/auth.py\0")
+        files = changed_files_from_git(staged=True)
+        assert len(files) == 1
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["git", "--no-pager", "diff", "--name-only", "-z", "--cached"]
+
+    @patch("crossreview.pack.subprocess.run")
+    def test_unstaged_command(self, mock_run: MagicMock):
+        """No ref, no staged → git diff --name-only -z."""
+        mock_run.return_value = MagicMock(stdout="src/main.py\0")
+        files = changed_files_from_git()
+        assert len(files) == 1
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["git", "--no-pager", "diff", "--name-only", "-z"]
+
+
+# ===== Build DiffSource helper =====
+
+class TestBuildDiffSource:
+    """build_diff_source — provenance metadata factory."""
+
+    def test_committed_ref(self):
+        ds = build_diff_source("HEAD~1", staged=False)
+        assert ds.type == "committed"
+        assert ds.base == "HEAD~1"
+        assert ds.head == "HEAD"
+        assert ds.captured_at is None
+
+    def test_range_ref(self):
+        ds = build_diff_source("abc..def", staged=False)
+        assert ds.type == "range"
+        assert ds.base == "abc"
+        assert ds.head == "def"
+        assert ds.captured_at is None
+
+    def test_three_dot_range_ref(self):
+        """Three-dot range (main...feat) must not produce a leading dot in head."""
+        ds = build_diff_source("main...feat", staged=False)
+        assert ds.type == "range"
+        assert ds.base == "main"
+        assert ds.head == "feat"   # was ".feat" before fix
+        assert ds.captured_at is None
+
+    def test_staged(self):
+        ds = build_diff_source(None, staged=True)
+        assert ds.type == "staged"
+        assert ds.base is None
+        assert ds.captured_at is not None
+        # captured_at should be a valid ISO-8601 string
+        assert "T" in ds.captured_at
+
+    def test_unstaged(self):
+        ds = build_diff_source(None, staged=False)
+        assert ds.type == "unstaged"
+        assert ds.base is None
+        assert ds.captured_at is not None
+
+
+# ===== DiffSource in AssemblePack =====
+
+class TestAssemblePackDiffSource:
+    """assemble_pack correctly threads through diff_source."""
+
+    def test_no_diff_source_by_default(self):
+        pack = assemble_pack(SIMPLE_DIFF)
+        assert pack.diff_source is None
+
+    def test_diff_source_committed(self):
+        ds = GitDiffSource(type="committed", base="HEAD~1", head="HEAD")
+        pack = assemble_pack(SIMPLE_DIFF, diff_source=ds)
+        assert pack.diff_source is not None
+        assert pack.diff_source.type == "committed"
+        assert pack.diff_source.base == "HEAD~1"
+
+    def test_diff_source_staged(self):
+        ds = GitDiffSource(type="staged", captured_at="2026-04-29T00:00:00+00:00")
+        pack = assemble_pack(SIMPLE_DIFF, diff_source=ds)
+        assert pack.diff_source is not None
+        assert pack.diff_source.type == "staged"
+        assert pack.diff_source.captured_at == "2026-04-29T00:00:00+00:00"
+
+    def test_diff_source_serializes_to_json(self):
+        ds = GitDiffSource(type="committed", base="abc", head="HEAD")
+        pack = assemble_pack(SIMPLE_DIFF, diff_source=ds)
+        d = pack_to_dict(pack)
+        assert d["diff_source"]["type"] == "committed"
+        assert d["diff_source"]["base"] == "abc"
+        assert d["diff_source"]["head"] == "HEAD"
+
+    def test_diff_source_round_trips_through_json(self):
+        from crossreview.schema import review_pack_from_dict
+        ds = GitDiffSource(type="staged", captured_at="2026-04-29T00:00:00+00:00")
+        pack = assemble_pack(SIMPLE_DIFF, diff_source=ds)
+        data = pack_to_dict(pack)
+        restored = review_pack_from_dict(data)
+        assert restored.diff_source is not None
+        assert restored.diff_source.type == "staged"
+        assert restored.diff_source.captured_at == "2026-04-29T00:00:00+00:00"
+
+    def test_no_diff_source_round_trips_as_none(self):
+        from crossreview.schema import review_pack_from_dict
+        pack = assemble_pack(SIMPLE_DIFF)
+        data = pack_to_dict(pack)
+        assert data["diff_source"] is None
+        restored = review_pack_from_dict(data)
+        assert restored.diff_source is None
+
+    def test_artifact_diff_source_round_trips(self):
+        """ArtifactDiffSource (v1 discriminant) deserializes to the correct class."""
+        from crossreview.schema import ArtifactDiffSource, review_pack_from_dict
+        ds = ArtifactDiffSource(
+            type="artifact_diff",
+            artifact_kind="design_doc",
+            artifact_id="doc-abc123",
+            version_before="v1",
+            version_after="v2",
+        )
+        pack = assemble_pack(SIMPLE_DIFF, diff_source=ds)
+        data = pack_to_dict(pack)
+        assert data["diff_source"]["type"] == "artifact_diff"
+        restored = review_pack_from_dict(data)
+        assert isinstance(restored.diff_source, ArtifactDiffSource)
+        assert restored.diff_source.artifact_kind == "design_doc"
+        assert restored.diff_source.artifact_id == "doc-abc123"
+
+    def test_unknown_diff_source_type_is_rejected(self):
+        """Unknown discriminants should fail instead of being silently coerced."""
+        from crossreview.schema import review_pack_from_dict
+        pack = assemble_pack(SIMPLE_DIFF)
+        data = pack_to_dict(pack)
+        data["diff_source"] = {"type": "artifact_dif"}
+
+        with pytest.raises(ValueError, match="unknown diff_source.type"):
+            review_pack_from_dict(data)

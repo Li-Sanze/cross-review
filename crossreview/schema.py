@@ -113,6 +113,51 @@ class ContextFile:
 
 
 @dataclass
+class GitDiffSource:
+    """Provenance metadata for git-based diffs (added in v05-09).
+
+    Captures how the diff was collected so review results can be associated
+    with their origin (committed history vs. pre-commit working-tree state).
+
+    ``type`` values:
+      - ``"committed"``  — ``git diff BASE HEAD``; reproducible from git history.
+      - ``"range"``      — ``git diff BASE..HEAD``; explicit ref range.
+      - ``"staged"``     — ``git diff --cached``; not reproducible after commit.
+      - ``"unstaged"``   — ``git diff``; not reproducible after staging or commit.
+
+    ``captured_at`` is set only for ``staged`` and ``unstaged`` diffs (ISO-8601 UTC).
+    Packs created before v05-09 have ``diff_source = None``.
+    """
+    type: Literal["committed", "staged", "unstaged", "range"]
+    base: str | None = None           # git ref for "committed"; left side of "range"
+    head: str | None = None           # "HEAD" for "committed"; right side of "range"
+    captured_at: str | None = None    # ISO-8601 UTC; set for staged/unstaged
+
+
+@dataclass
+class ArtifactDiffSource:
+    """Provenance metadata for structured-artifact diffs (v1 placeholder).
+
+    Used when the review target is a non-code artifact (design_doc, plan, etc.)
+    rather than a git diff. Fields reflect document version semantics; git ref
+    fields from :class:`GitDiffSource` do not apply here.
+
+    ``artifact_kind`` values (v1): ``"design_doc"``, ``"plan"``.
+    """
+    type: Literal["artifact_diff"]
+    artifact_kind: str                    # e.g. "design_doc", "plan"
+    artifact_id: str                      # stable identifier for the artifact
+    version_before: str | None = None
+    version_after: str | None = None
+    captured_at: str | None = None        # ISO-8601 UTC
+
+
+# Discriminated union — dispatch on the ``type`` field.
+# Packs created before v05-09 carry ``diff_source = None``.
+DiffSource = GitDiffSource | ArtifactDiffSource
+
+
+@dataclass
 class Evidence:
     """Deterministic evidence item. v0-scope.md §7 Evidence."""
     source: str              # "npm test", "eslint", "pytest", ...
@@ -240,6 +285,9 @@ class ReviewPack:
 
     # Budget
     budget: PackBudget = field(default_factory=PackBudget)
+
+    # Diff provenance — None for packs created before v05-09
+    diff_source: DiffSource | None = None
 
 
 @dataclass
@@ -629,6 +677,29 @@ def review_pack_from_dict(data: dict[str, Any]) -> ReviewPack:
         timeout_sec=budget_data.get("timeout_sec"),
     )
 
+    diff_source_data = data.get("diff_source")
+    diff_source: DiffSource | None = None
+    if diff_source_data is not None:
+        ds_type = diff_source_data["type"]
+        if ds_type in {"committed", "staged", "unstaged", "range"}:
+            diff_source = GitDiffSource(
+                type=ds_type,
+                base=diff_source_data.get("base"),
+                head=diff_source_data.get("head"),
+                captured_at=diff_source_data.get("captured_at"),
+            )
+        elif ds_type == "artifact_diff":
+            diff_source = ArtifactDiffSource(
+                type=diff_source_data["type"],
+                artifact_kind=diff_source_data.get("artifact_kind", ""),
+                artifact_id=diff_source_data.get("artifact_id", ""),
+                version_before=diff_source_data.get("version_before"),
+                version_after=diff_source_data.get("version_after"),
+                captured_at=diff_source_data.get("captured_at"),
+            )
+        else:
+            raise ValueError(f"unknown diff_source.type: {ds_type}")
+
     return ReviewPack(
         schema_version=data.get("schema_version", SCHEMA_VERSION),
         artifact_type=artifact_type,
@@ -642,6 +713,7 @@ def review_pack_from_dict(data: dict[str, Any]) -> ReviewPack:
         context_files=context_files,
         evidence=evidence,
         budget=budget,
+        diff_source=diff_source,
     )
 
 

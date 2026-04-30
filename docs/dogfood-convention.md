@@ -47,9 +47,12 @@
   "run_id": "20260428T173000-a1b2c3d4",
   "timestamp": "2026-04-28T17:30:00+08:00",
   "repo": "cross-review",
-  "diff_ref": "HEAD~1",
-  "diff_base": "769b823",
-  "diff_head": "1436bda",
+  "diff_source": {
+    "type": "committed",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "captured_at": null
+  },
   "artifact_fingerprint": "a1b2c3d4e5f6a7b8...",
   "pack_fingerprint": "f7e8d9c0b1a2...",
   "review_status": "complete",
@@ -71,9 +74,7 @@
 | `run_id` | 计算 | `{timestamp_compact}-{artifact_fingerprint[:8]}` |
 | `timestamp` | 运行时 | ISO 8601 带时区 |
 | `repo` | git remote 或目录名 | 被 review 的仓库 |
-| `diff_ref` | CLI 参数 | 用户传的 `--diff` 参数原值 |
-| `diff_base` | `git rev-parse {diff_ref}` | diff 起点 commit SHA（短） |
-| `diff_head` | `git rev-parse HEAD` | diff 终点 commit SHA（短） |
+| `diff_source` | ReviewPack | diff 来源。committed/range 记录 base/head；staged/unstaged 记录 captured_at |
 | `artifact_fingerprint` | ReviewResult | `sha256(diff_content)` |
 | `pack_fingerprint` | ReviewResult | `sha256(pack_json_without_pack_fp)` |
 | `review_status` | ReviewResult | `complete` / `rejected` / `failed` |
@@ -101,6 +102,7 @@ dogfood/
 ```bash
 # 目标 UX
 crossreview verify --diff HEAD~1 --save-dogfood
+crossreview verify --staged --save-dogfood
 
 # 等价于手工：
 crossreview verify --diff HEAD~1 --format json > .crossreview/dogfood/runs/{run_id}.json

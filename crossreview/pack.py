@@ -4,8 +4,10 @@ Implements 1B.1 (pack assembly) and supports 1C.1 (pack CLI).
 Core responsibility: construct a valid ReviewPack from git diff + optional context.
 
 Design decisions:
-  - ``--diff REF`` → ``git diff REF HEAD`` (committed changes; no unstaged).
+  - ``--diff REF`` → ``git diff REF HEAD`` (committed changes).
   - ``--diff A..B`` → passed directly to git (explicit range).
+  - ``--staged``   → ``git diff --cached`` (staged vs HEAD).
+  - default        → ``git diff`` (unstaged working tree vs index).
   - changed_files via ``git diff --name-only -z`` (NUL-delimited, handles special-char paths).
     Regex fallback available for standalone diff text via ``extract_changed_files()``.
   - Language detected from file extension (simple mapping).
@@ -16,6 +18,7 @@ Design decisions:
 
 from __future__ import annotations
 
+import datetime
 import json
 import re
 import subprocess
@@ -24,6 +27,8 @@ from pathlib import Path
 from .schema import (
     ArtifactType,
     ContextFile,
+    DiffSource,
+    GitDiffSource,
     Evidence,
     FileMeta,
     PackBudget,
@@ -102,19 +107,31 @@ class GitDiffError(Exception):
     """Raised when git diff fails."""
 
 
-def diff_from_git(ref: str, repo_root: Path | None = None) -> str:
-    """Run ``git diff REF HEAD`` and return the unified diff string.
+def diff_from_git(
+    ref: str | None = None,
+    *,
+    staged: bool = False,
+    repo_root: Path | None = None,
+) -> str:
+    """Run git diff and return the unified diff string.
 
-    If *ref* contains ``..``, it is passed directly as a range
-    (e.g. ``abc..def``). Otherwise ``HEAD`` is appended as the target.
+    Modes:
+      - *ref* provided, no ``..``: ``git diff REF HEAD`` (committed changes).
+      - *ref* contains ``..``:     ``git diff REF`` (explicit range).
+      - ``staged=True``:           ``git diff --cached`` (staged vs HEAD).
+      - default (no ref):          ``git diff`` (unstaged working tree vs index).
 
     Raises :class:`GitDiffError` on non-zero git exit.
     """
     cmd = ["git", "--no-pager", "diff"]
-    if ".." in ref:
-        cmd.append(ref)
-    else:
-        cmd.extend([ref, "HEAD"])
+    if staged:
+        cmd.append("--cached")
+    elif ref is not None:
+        if ".." in ref:
+            cmd.append(ref)
+        else:
+            cmd.extend([ref, "HEAD"])
+    # else: plain "git diff" for unstaged working tree
 
     try:
         result = subprocess.run(
@@ -136,8 +153,15 @@ def diff_from_git(ref: str, repo_root: Path | None = None) -> str:
 # Changed-file extraction
 # ---------------------------------------------------------------------------
 
-def changed_files_from_git(ref: str, repo_root: Path | None = None) -> list[FileMeta]:
+def changed_files_from_git(
+    ref: str | None = None,
+    *,
+    staged: bool = False,
+    repo_root: Path | None = None,
+) -> list[FileMeta]:
     """Get changed file list via ``git diff --name-only -z``.
+
+    Modes mirror :func:`diff_from_git`.
 
     Uses NUL-delimited output (``-z``) to correctly handle paths with
     special characters (spaces, tabs, quotes). Preferred over regex parsing.
@@ -145,10 +169,14 @@ def changed_files_from_git(ref: str, repo_root: Path | None = None) -> list[File
     Raises :class:`GitDiffError` on non-zero git exit.
     """
     cmd = ["git", "--no-pager", "diff", "--name-only", "-z"]
-    if ".." in ref:
-        cmd.append(ref)
-    else:
-        cmd.extend([ref, "HEAD"])
+    if staged:
+        cmd.append("--cached")
+    elif ref is not None:
+        if ".." in ref:
+            cmd.append(ref)
+        else:
+            cmd.extend([ref, "HEAD"])
+    # else: plain unstaged
 
     try:
         result = subprocess.run(
@@ -170,6 +198,26 @@ def changed_files_from_git(ref: str, repo_root: Path | None = None) -> list[File
         if p not in seen:
             seen[p] = FileMeta(path=p, language=detect_language(p))
     return list(seen.values())
+
+
+def build_diff_source(ref: str | None, staged: bool) -> GitDiffSource:
+    """Build a :class:`GitDiffSource` from diff collection parameters.
+
+    Used by the CLI to attach provenance metadata to every ReviewPack.
+    For artifact-based reviews (v1), construct :class:`ArtifactDiffSource` directly.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if staged:
+        return GitDiffSource(type="staged", captured_at=now)
+    if ref is None:
+        return GitDiffSource(type="unstaged", captured_at=now)
+    if ".." in ref:
+        # Detect three-dot ("main...feat") vs two-dot ("main..feat") range syntax before
+        # splitting, so head doesn't get a spurious leading dot.
+        sep = "..." if "..." in ref else ".."
+        parts = ref.split(sep, 1)
+        return GitDiffSource(type="range", base=parts[0], head=parts[1])
+    return GitDiffSource(type="committed", base=ref, head="HEAD")
 
 
 # Regex fallback for extract_changed_files (used when only diff text is available,
@@ -288,12 +336,15 @@ def assemble_pack(
     context_files: list[ContextFile] | None = None,
     evidence: list[Evidence] | None = None,
     budget: PackBudget | None = None,
+    diff_source: DiffSource | None = None,
 ) -> ReviewPack:
     """Construct a validated ReviewPack from components.
 
     * If *changed_files* is ``None``, they are extracted from *diff*.
     * Fingerprints are computed automatically.
     * ``validate_review_pack()`` is called; violations raise ``ValueError``.
+    * *diff_source* attaches provenance metadata (see :class:`DiffSource`);
+      use :func:`build_diff_source` to construct it from CLI args.
     """
     if changed_files is None:
         changed_files = extract_changed_files(diff)
@@ -312,6 +363,7 @@ def assemble_pack(
         context_files=context_files,
         evidence=evidence,
         budget=budget or PackBudget(),
+        diff_source=diff_source,
     )
 
     # pack_fingerprint = hash of pack content with pack_fp excluded

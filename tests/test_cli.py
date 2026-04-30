@@ -138,6 +138,52 @@ class TestPackCLI:
             rc = main(["pack", "--diff", "HEAD~1"])
         assert rc == 1
 
+    def test_staged_pack(self, capsys):
+        """--staged flag produces a pack with diff_source.type == 'staged'."""
+        with _patch_git()[0], _patch_git()[1]:
+            rc = main(["pack", "--staged"])
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["diff_source"]["type"] == "staged"
+        assert parsed["diff_source"]["captured_at"] is not None
+
+    def test_unstaged_pack(self, capsys):
+        """--unstaged flag produces a pack with diff_source.type == 'unstaged'."""
+        with _patch_git()[0], _patch_git()[1]:
+            rc = main(["pack", "--unstaged"])
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["diff_source"]["type"] == "unstaged"
+        assert parsed["diff_source"]["captured_at"] is not None
+
+    def test_diff_produces_committed_diff_source(self, capsys):
+        """--diff REF produces a pack with diff_source.type == 'committed'."""
+        with _patch_git()[0], _patch_git()[1]:
+            rc = main(["pack", "--diff", "HEAD~1"])
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["diff_source"]["type"] == "committed"
+        assert parsed["diff_source"]["base"] == "HEAD~1"
+        assert parsed["diff_source"]["head"] == "HEAD"
+
+    def test_staged_calls_diff_from_git_with_staged_flag(self, capsys):
+        """CLI passes staged=True to diff_from_git when --staged is used."""
+        with (
+            patch("crossreview.cli.diff_from_git", return_value=SAMPLE_DIFF) as mock_diff,
+            patch("crossreview.cli.changed_files_from_git", return_value=SAMPLE_FILES),
+        ):
+            main(["pack", "--staged"])
+        mock_diff.assert_called_once_with(None, staged=True)
+
+    def test_unstaged_calls_diff_from_git_without_ref(self, capsys):
+        """CLI passes ref=None, staged=False to diff_from_git when --unstaged is used."""
+        with (
+            patch("crossreview.cli.diff_from_git", return_value=SAMPLE_DIFF) as mock_diff,
+            patch("crossreview.cli.changed_files_from_git", return_value=SAMPLE_FILES),
+        ):
+            main(["pack", "--unstaged"])
+        mock_diff.assert_called_once_with(None, staged=False)
+
 
 # ---------------------------------------------------------------------------
 # Verify subcommand (stub)

@@ -2,7 +2,7 @@
 
 > **执行原则**：先验证核心假设（context isolation + 确定性判定在 code_diff 上可行），再扩展通道和制品类型。
 > **Sopify 协同**：CR v0 release gate → Sopify Phase 4a advisory → 3 项目 dogfood → 数据驱动后续。
-> **最近同步**：2026-04-28 — v0.1.0a1 已发布，9/9 release gate 通过，当前聚焦发布 smoke + Phase 4a dogfood 准备。
+> **最近同步**：2026-04-29 — v05-09 新增（工作树 diff 支持），真实用户场景驱动：commit 前 review staged 变更。
 
 ## 三阶段执行路线
 
@@ -45,8 +45,9 @@
 | ID | 任务 | 优先级 | 依赖 | 状态 |
 |----|------|--------|------|------|
 | v05-01b | 发布 smoke：PyPI 元数据 / clean env install / CLI smoke / tag 对齐 | P0 | v05-01a | 当前 |
+| v05-09 | `pack/verify` 新增 `--staged` / `--unstaged` 工作树 diff 支持；`DiffSource` discriminated union（`GitDiffSource \| ArtifactDiffSource`）随本任务合并，为 v1 结构化产物扩展预留无堆字段路径；v1-09b 合并入此任务；CrossReview 自查 `--staged` 验证通过 | P0 | v05-01a | ✅ 完成 |
 | v05-02b | Sopify Phase 4a 消费侧草拟：迁移或复用 advisory SKILL.md + skill.yaml | P0 | v05-01b | 待 |
-| v05-03 | Phase 4a 端到端验证: develop → `pack` → `render-prompt` → 宿主隔离审查 → `ingest --format human` → 结果展示 | P0 | v05-01b, v05-02b, v05-04 | 待 |
+| v05-03 | Phase 4a 端到端验证: develop → `pack` → `render-prompt` → 宿主隔离审查 → `ingest --format human` → 结果展示 | P0 | v05-01b, v05-02b, v05-04, v05-09 | 待 |
 | v05-04 | SKILL.md verdict 处理指令（4 种 verdict） | P0 | v05-02a | ✅ 仓库内草拟完成，待 dogfood 校验 |
 | v05-05 | 技术文章 #1：产品定位与核心洞察 | P1 | v0-07 | 待 |
 | v05-06 | 技术文章 #2：eval 体系与质量承诺 | P2 | v0-04b | 待 |
@@ -64,6 +65,7 @@
 | 方向 | 内容摘要 | 启动条件 | 任务 ID 范围 |
 |------|---------|---------|------------|
 | v1 核心能力 | design_doc + plan artifact type、路由机制 | v0.5 稳定 + dogfood 数据 | v1-01~09 |
+| v1 Pack 增强 | auto-context discovery（按 import graph 自动扩充 pack，受 budget gate 约束，减少 pack-centric 上下文盲点）；`ArtifactDiffSource`（v1-09b）已在 v05-09 作为 union 成员定义，v1 只需填充字段语义 | v0.5 稳定 + v05-09 上线后 | v1-09a |
 | v1 产品通道 | GitHub Action (P0 优先) → MCP → SDK | v0.5 稳定 | v1-10~16 |
 | v1 质量增强 | Eval dashboard + fixture 扩充至 100 | v1 核心启动后 | v1-17~18 |
 

@@ -106,3 +106,33 @@ CrossReview 的长期推荐形态是：
 | contract 约束 | ReviewPack / ReviewResult 不引入 Sopify 内部状态词 |
 
 当前 org 名已固定为 `evidentloop`。只要 sibling repo 保持 standalone-first，`evidentloop` 不会自动把 CrossReview 锁定为 Sopify-only 产品；是否需要再次调整 umbrella org，应在出现明确外部 adoption / 品牌信号后再评估。
+
+---
+
+## 附录: andrej-karpathy-skills 学习分析
+
+> 遵循 Sopify 总纲 Design Influence Intake Gate 三级准入。
+> 来源：[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) — 66 行 4 原则的 LLM 行为指导。
+
+### CrossReview 可学习项
+
+| 启示 | Tier | 哲学映射 | 实现路径 | 验证方式 |
+|------|------|---------|---------|---------|
+| **Scope leak detection（作用域越界检测）** | **T1 Adoption** | Loop-first (verify scope = produce scope) | cross-review eval 加检测维度：diff 中的文件是否在 task scope 内 | eval SLO 加 `scope_leak_rate` 指标 |
+| **Verification gap detection（验证缺失检测）** | **T1 Adoption** | Loop-first (verify 环节完整性) | review 时检查 task 是否有对应测试或验证步骤 | eval SLO 加 `verification_coverage` 指标 |
+| **Over-abstraction detection（过度抽象检测）** | **T0 Reference** | Loop-first (minimal produce) | review prompt 加 "flag unnecessarily complex patterns" | 需建 eval baseline 后再评估误报率 |
+| **Surgical diff 评分** | **T0 Reference** | Loop-first (scoped produce) | 输出中加 `surgical_score` 维度 | 需定义评分标准，当前无 baseline |
+
+### 与 CrossReview 现有架构的对齐
+
+- **Scope leak detection** 可作为 FindingNormalizer 的新 finding category，不需要改管道架构
+- **Verification gap detection** 需要 ReviewPack 携带 task scope 信息（当前 v0 只有 code_diff），属于 v1 multi-artifact 预留范围
+- **Over-abstraction / Surgical diff** 可先在 reviewer prompt 中引导，不需要新 schema field
+- 所有检测维度的输出仍经过 deterministic Adjudicator——不改变 advisory-only 定位
+
+### 明确不学的
+
+| 特性 | 理由 |
+|------|------|
+| 编码行为约束（"Think Before Coding" 等） | CrossReview 是 verifier 不是 behavior modifier；行为约束归 Sopify prompt 或宿主 |
+| "For trivial tasks, use judgment" | CrossReview 对所有输入执行相同管道，不做复杂度跳过 |

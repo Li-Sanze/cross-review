@@ -5,8 +5,11 @@ Usage::
     crossreview pack --diff HEAD~1 > pack.json
     crossreview pack --diff HEAD~1 --intent "fix auth" --focus auth > pack.json
     crossreview pack --diff HEAD~1 --task ./task.md --context ./plan.md > pack.json
+    crossreview pack --staged                                          # review staged changes
+    crossreview pack --unstaged                                        # review unstaged working-tree changes
     crossreview verify --diff HEAD~1                               # one-stop: pack + verify (default: --format human)
     crossreview verify --diff HEAD~1 --intent "fix auth"
+    crossreview verify --staged                                        # one-stop: staged + verify
     crossreview verify --pack pack.json                            # verify pre-built pack (default: --format json)
     crossreview render-prompt --pack pack.json > prompt.md
     crossreview ingest --raw-analysis raw.md --pack pack.json --model claude-sonnet-4-20250514
@@ -28,6 +31,7 @@ from .ingest import run_ingest
 from .pack import (
     GitDiffError,
     assemble_pack,
+    build_diff_source,
     changed_files_from_git,
     compute_pack_completeness,
     diff_from_git,
@@ -57,11 +61,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "pack",
         help="Assemble a ReviewPack from a git diff.",
     )
-    pack_p.add_argument(
+    _pack_diff_mode = pack_p.add_mutually_exclusive_group(required=True)
+    _pack_diff_mode.add_argument(
         "--diff",
-        required=True,
+        default=None,
         metavar="REF",
-        help="Git ref for diff base (e.g. HEAD~1, abc123, main..feat).",
+        help="Git ref for diff base (e.g. HEAD~1, abc123, main..feat). Produces git diff REF HEAD.",
+    )
+    _pack_diff_mode.add_argument(
+        "--staged",
+        action="store_true",
+        default=False,
+        help="Review staged changes (git diff --cached). Mutually exclusive with --diff/--unstaged.",
+    )
+    _pack_diff_mode.add_argument(
+        "--unstaged",
+        action="store_true",
+        default=False,
+        help="Review unstaged working-tree changes (git diff). Mutually exclusive with --diff/--staged.",
     )
     pack_p.add_argument(
         "--intent",
@@ -91,7 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- verify ---
     verify_p = sub.add_parser(
         "verify",
-        help="Review a change and emit ReviewResult. Accepts --pack (pre-built) or --diff (one-stop).",
+        help="Review a change and emit ReviewResult. Accepts --pack (pre-built) or a diff mode (--diff/--staged/--unstaged).",
     )
     _mode = verify_p.add_mutually_exclusive_group(required=True)
     _mode.add_argument(
@@ -105,6 +122,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="REF",
         help="Git ref for diff base (e.g. HEAD~1, abc123, main..feat). Assembles a ReviewPack inline.",
+    )
+    _mode.add_argument(
+        "--staged",
+        action="store_true",
+        default=False,
+        help="Assemble pack from staged changes (git diff --cached) and verify inline.",
+    )
+    _mode.add_argument(
+        "--unstaged",
+        action="store_true",
+        default=False,
+        help="Assemble pack from unstaged working-tree changes (git diff) and verify inline.",
     )
     # pack flags (only meaningful with --diff; ignored with --pack)
     verify_p.add_argument("--intent", default=None, help="Task intent string (--diff mode).")
@@ -190,14 +219,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _build_pack_from_diff(args: argparse.Namespace) -> ReviewPack | None:
-    """Assemble a ReviewPack from ``--diff`` args. Returns the pack or None on error.
+    """Assemble a ReviewPack from diff mode args. Returns the pack or None on error.
 
+    Handles ``--diff REF``, ``--staged``, and ``--unstaged`` modes.
     Note: ``--intent``, ``--task``, ``--focus``, and ``--context`` are pack flags
-    shared by the ``pack`` subcommand and ``verify --diff`` mode; they are ignored
+    shared by the ``pack`` subcommand and ``verify`` diff modes; they are ignored
     when ``verify --pack`` is used.
     """
+    staged: bool = getattr(args, "staged", False)
+    ref: str | None = getattr(args, "diff", None)
+    # unstaged mode = ref is None and staged is False; no extra variable needed
+
     try:
-        diff = diff_from_git(args.diff)
+        diff = diff_from_git(ref, staged=staged)
     except GitDiffError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return None
@@ -207,7 +241,7 @@ def _build_pack_from_diff(args: argparse.Namespace) -> ReviewPack | None:
         return None
 
     try:
-        changed_files = changed_files_from_git(args.diff)
+        changed_files = changed_files_from_git(ref, staged=staged)
     except GitDiffError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return None
@@ -234,6 +268,8 @@ def _build_pack_from_diff(args: argparse.Namespace) -> ReviewPack | None:
             print(f"error: context file is not valid UTF-8: {exc}", file=sys.stderr)
             return None
 
+    diff_source = build_diff_source(ref, staged)
+
     try:
         return assemble_pack(
             diff,
@@ -242,6 +278,7 @@ def _build_pack_from_diff(args: argparse.Namespace) -> ReviewPack | None:
             task_file=task_content,
             focus=args.focus,
             context_files=context_files,
+            diff_source=diff_source,
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -291,12 +328,16 @@ def _load_pack(path: str):
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    """Execute ``crossreview verify`` (--pack or --diff mode)."""
-    # Resolve output format: --diff defaults to human, --pack defaults to json
-    output_format = args.output_format or ("human" if args.diff else "json")
+    """Execute ``crossreview verify`` (--pack or a diff mode)."""
+    staged: bool = getattr(args, "staged", False)
+    unstaged: bool = getattr(args, "unstaged", False)
+    diff_mode_active = bool(args.diff) or staged or unstaged
+
+    # Resolve output format: diff modes default to human, --pack defaults to json
+    output_format = args.output_format or ("human" if diff_mode_active else "json")
 
     # Build pack
-    if args.diff:
+    if diff_mode_active:
         pack = _build_pack_from_diff(args)
         if pack is None:
             return 1
